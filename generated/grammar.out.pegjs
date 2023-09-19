@@ -1,3 +1,6 @@
+// grammar using a custom PEG format
+// it needs to be preprocessed by grammar-preprocessor
+
 /************* MODULE STRUCTURE *************/
 
 module
