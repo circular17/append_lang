@@ -50,9 +50,9 @@ var
 names = i:identifiers { return tree.leaf(tree.NAMES, { identifiers:i }, error) }
 
 deconstruct
-    = "(" __ hd:deconstructElement tl:(_ ";" __ e:deconstructElement { return e })* __ ")"
+    = "(" __ hd:deconstructElement tl:(_ "," __ e:deconstructElement { return e })* __ ")"
         { return tree.leaf(tree.DECONSTRUCT_TUPLE, { elements: [hd].concat(tl) }, error) }
-    / "{|" __ hd:deconstructMember tl:(_ ";" __ e:deconstructMember { return e })* __ "|}"
+    / "{|" __ hd:deconstructMember tl:(_ "," __ e:deconstructMember { return e })* __ "|}"
         { return tree.leaf(tree.DECONSTRUCT_RECORD, { elements: [hd].concat(tl) }, error) }
 
 deconstructMember
@@ -143,7 +143,7 @@ loop
         { return tree.leaf(tree.WHILE, { condition, body }, error) }
 
 optionWithPipe
-    = value:pipedExpr option:(ternary / case / keyValue / wiseBlock)? {
+    = value:pipedExpr option:(ternary / case / wiseBlock)? {
         if (option) {
             option.key = value
             return option
@@ -153,7 +153,7 @@ optionWithPipe
     }
 
 optionNoPipe
-    = value:valueExpr option:(ternary / keyValue / wiseBlock)? {
+    = value:valueExpr option:(ternary / wiseBlock)? {
         if (option) {
             option.key = value
             return option
@@ -170,10 +170,6 @@ wiseBlock
             statements
         }, error)
     }
-
-keyValue
-    = _ "->" __ value:valueExpr
-        { return tree.leaf(tree.DICT_KEY_VALUE, { value }, error) }
 
 ternary
     = __ "?" __ ifTrue:(branch / inlineBlock / return) ifFalse:(__ "else" __ v:(branch / inlineBlock / return) { return v })?
@@ -193,7 +189,7 @@ caseBody
     }
 
 caseOption
-    = hd:pattern tl:(_ ";" __ p:pattern { return p })* __ "->" __ value:(branch / inlineBlock / return)
+    = hd:pattern tl:(_ "," __ p:pattern { return p })* __ "->" __ value:(branch / inlineBlock / return)
         { return tree.leaf(tree.CASE_OPTION, { patterns: [hd].concat(tl), value }, error) }
 inlineBlock
     = "{" !(([-+&*^] / [><] "="?) "}") __ statements:statements? __ "}"
@@ -248,7 +244,7 @@ comparisonPattern
     = operator:(">" / ">=" / $("<" ![>|]) / "<=" / "in") _ value:aboveComparison
 
 tuplePattern
-    = "(" startEllipsis:(_ "...")? __ hd:pattern tl:(_ ";" __ v:pattern { return v })* __
+    = "(" startEllipsis:(_ "...")? __ hd:pattern tl:(_ "," __ v:pattern { return v })* __
     endEllipsis:("..." _)? close:")"? {
         if (!close) {
             if (tl.length > 0)
@@ -264,7 +260,7 @@ tuplePattern
 recPattern
     = "{|" _ ellipsis:("..." _)? "|}"
         { return tree.leaf(tree.REC_VALUE, { members: [], ellipsis: !!ellipsis }, error) }
-    / "{|" __ hd:recMemberPattern tl:(_ ";" __ m:recMemberPattern { return m })* __
+    / "{|" __ hd:recMemberPattern tl:(_ "," __ m:recMemberPattern { return m })* __
     ellipsis:("..." _)? close:"|}"? {
         if (!close) error("Expecting \"|\x7d\" to close the record")
         return tree.leaf(tree.REC_VALUE, { members: [hd].concat(tl), ellipsis: !!ellipsis }, error)
@@ -278,7 +274,7 @@ listPattern
     = "[" _ ellipsis:("..." _)? "]"
         { return tree.leaf(tree.LIST, { values: [], startEllipsis: false, endEllipsis: !!ellipsis }, error) }
 
-    / "[" startEllipsis:(_ "...")? _ hd:pattern tl:(_ ";" __ v:pattern { return v })*
+    / "[" startEllipsis:(_ "...")? _ hd:pattern tl:(_ "," __ v:pattern { return v })*
     __ endEllipsis:("..." _)? close:"]"? {
         if (!close) error("Expecting \"]\" to close the list")
         return tl.length > 0
@@ -290,7 +286,7 @@ setPattern
     = "set" _ "{" _ ellipsis:("..." _)? "}"
         { return tree.leaf(tree.SET, { values: [], ellipsis: !!ellipsis }, error) }
 
-    / "set" _ "{" __ hd:pattern tl:(_ ";" __ v:pattern { return v })* __ ellipsis:("..." _)? close:"}"? {
+    / "set" _ "{" __ hd:pattern tl:(_ "," __ v:pattern { return v })* __ ellipsis:("..." _)? close:"}"? {
         if (!close) error("Expecting \"\x7d\" to close the set")
         return tl.length > 0
             ? tree.leaf(tree.SET, { values: [hd].concat(tl), ellipsis: !!ellipsis }, error)
@@ -301,7 +297,7 @@ dictPattern
     = "dict" _ "{" _ ellipsis:("..." _)? "}"
         { return tree.leaf(tree.DICT_VALUE, { elements: [], ellipsis: !!ellipsis }, error) }
 
-    / "dict" _ "{" __ hd:dictKeyPattern tl:(_ ";" __ m:dictKeyPattern { return m })
+    / "dict" _ "{" __ hd:dictKeyPattern tl:(_ "," __ m:dictKeyPattern { return m })
     __ ellipsis:("..." _)? close:"}"? {
         if (!close) error("Expecting \"\x7d\" to close the dictionary")
         return tree.leaf(tree.DICT_VALUE, { elements: [hd].concat(tl), ellipsis: !!ellipsis }, error)
@@ -387,7 +383,7 @@ dictType
     = "dict" _ "{" __ key:tupleType _ "->" __ value:tupleType __ "}"
         { return tree.leaf(tree.DICT_TYPE, { key, value }, error) }
 recType
-    = "{|" __ hd:recMemberType tl:((_ ";" / eol) __ m:recMemberType { return m })* __ "|}"
+    = "{|" __ hd:recMemberType tl:((_ "," / eol) __ m:recMemberType { return m })* __ "|}"
         { return tree.leaf(tree.REC_TYPE, { members: [hd].concat(tl) }, error) }
 recMemberType
     = regularMemberType
@@ -575,7 +571,7 @@ appendCall
         { return tree.leaf(tree.CALL, { fun, params: params ?? [] }, error) }
 
 rightParams
-    = _ hd:call tl:(_ "," __ c:nestedCall { return c })*
+    = _ hd:call tl:(_ ";" __ c:nestedCall { return c })*
         { return [hd].concat(tl) }
 
 callParam
@@ -627,9 +623,9 @@ cartesianPower
     }
 
 range
-    = first:multiplication to:(_ ".." includeLast:("=" / "<") __ last:multiplication)? {
+    = first:multiplication to:(_ op:(".." [=<] / "+..") __ lastOrCount:multiplication)? {
         if (to)
-            return tree.leaf(tree.RANGE, { first, last: to.last, includeLast: to.includeLast === "=" }, error)
+            return tree.leaf(tree.RANGE, { first, lastOrCount: to.last, op: to.op }, error)
         else
             return first
     }
@@ -709,7 +705,7 @@ implicitParam
     / "$" { error("Expecting letter for implicit parameter after \"$\"") }
 
 tuple
-    = "(" __ hd:branch tl:(_ ";" __ v:branch { return v })* close:")"? {
+    = "(" __ hd:branch tl:(_ "," __ v:branch { return v })* close:")"? {
         if (!close) {
             if (tl.length > 0)
                 error("Expecting \")\" to close the tuple")
@@ -727,7 +723,7 @@ recValue
         return tree.leaf(tree.REC_VALUE, { members: members ?? [] }, error)
     }
 recMembers
-    = __ hd:recMemberValue tl:(_ ";" __ m:recMemberValue { return m })* __
+    = __ hd:recMemberValue tl:(_ "," __ m:recMemberValue { return m })* __
 recMemberValue
     = name:id _ colon __ value:branch
         { return tree.leaf(tree.REC_MEMBER_VALUE, { name, value }, error) }
@@ -741,7 +737,7 @@ list = "[" _ elements:listElements? _ close:"]"? {
         return tree.leaf(tree.LIST, { values: elements ?? [] }, error)
     }
 listElements
-    = __ hd:(splat / branch) tl:(_ ";" __ v:(splat / branch) { return v })* __
+    = __ hd:(splat / branch) tl:(_ "," __ v:(splat / branch) { return v })* __
         { return [hd].concat(tl) }
 
 set = "set" _ "{" _ elements:setElements? _ close:"}"? {
@@ -749,7 +745,7 @@ set = "set" _ "{" _ elements:setElements? _ close:"}"? {
         return tree.leaf(tree.SET, { values: elements ?? [] }, error)
     }
 setElements
-    = __ hd:(splat / branch) tl:(_ ";" __ v:(splat / branch) { return v })* __
+    = __ hd:(splat / branch) tl:(_ "," __ v:(splat / branch) { return v })* __
         { return [hd].concat(tl) }
 
 dictValue
@@ -758,7 +754,7 @@ dictValue
         return tree.leaf(tree.DICT_VALUE, { elements: elements ?? [] }, error)
     }
 dictElements
-    = __ hd:dictKeyValue tl:(_ ";" __ m:dictKeyValue { return m })* __
+    = __ hd:dictKeyValue tl:(_ "," __ m:dictKeyValue { return m })* __
         { return [hd].concat(tl) }
 dictKeyValue
     = key:valueExpr _ "->" __ value:branch
@@ -791,7 +787,7 @@ boolean
 /************* TOKENS *************/
 
 identifiers
-    = hd:id tl:(_ "," __ id:id { return id })*
+    = hd:id tl:(_ "/" __ id:id { return id })*
         { return [hd].concat(tl) }
 
 id = $(!keyword "_"? [A-Za-z] [A-Za-z0-9_]*)
@@ -839,7 +835,7 @@ colon = $(":" ![=:])
 logicOp = "or" / "xor" / $("&" !"=")
 comparisonOp = $("=" !">") / "!=" / $(">" ![>=<]) / ">=" / $("<" ![>|]) / "<=" / "in";
 concatOp = $("++" !"=")
-additiveOp = $(("+" / "-") ![=>])
+additiveOp = $(("+" / "-") !([=>] / ".."))
 multiplicativeOp = $(("*" / "/" / "%") !"=")
 notOp = $("!" !"=")
 powerOp = $("^" !"=")

@@ -1,12 +1,12 @@
 // "append" language examples
-var a, b = 5e10; c int = () ?? 7; d int
+var a/b = 5e10; c int = () ?? 7; d int
 var number int | float | decimal = 5.4
-var point #vec float*float = #vec (12.5; 8)
-var pointStruct #point {| x float; y float |} = {| x: 3; y: 45.4 |}
-global fun p1 #point {| x float; y float |} "+" p2 #point {| x float; y float |}
-    => #point {| x: p1.x + p2.x; y: p1.y + p2.y |}
-def {| x: myX; y: myY |} = pointStruct
-var {| x; y |} = pointStruct <| x: 4
+var point #vec float*float = #vec (12.5, 8)
+var pointStruct #point {| x float, y float |} = {| x: 3, y: 45.4 |}
+global fun p1 #point {| x float, y float |} "+" p2 #point {| x float, y float |}
+    => #point {| x: p1.x + p2.x, y: p1.y + p2.y |}
+def {| x: myX, y: myY |} = pointStruct
+var {| x, y |} = pointStruct <| x: 4
 def xOnly = pointStruct <| !y
 pointStruct.y := 6
 def problematic str = "this {a}"
@@ -60,11 +60,13 @@ fun list ::any "length": int
     | <> -> 0
 
 var optionalList [int]? = ()
-optionalList = [1; 2; 3]
+optionalList = [1, 2, 3]
+mut optionalList insert (-12); 0
+mut optionalList del 1+..2 // range from 1, 2 elements long
 
 var sequenceOfInt seq[int]
 
-var setOfStr set{str} = set{"a"; "b"; "c"}
+var setOfStr set{str} = set{"a", "b", "c"}
 def onlyAB = setOfStr but "c"
 
 mut setOfStr add "four"
@@ -75,11 +77,11 @@ mut setOfStr del "four"
 | #done -> "four deleted" print
 | #none -> "four not found" print
 
-var dictionary #lookup dict{int -> str} = dict{5 -> "five"; 7 -> "seven"}
+var dictionary #lookup dict{int -> str} = dict{5 -> "five", 7 -> "seven"}
 def ZERO = 0. def ONE int = 1
 type circleF = #circle float
 def h = f >> g
-def multi = 2 add 3 squared, 4 cubed
+def multi = 2 add 3 squared; 4 cubed
 //def piped = 2 add 3 \ squared
 
 /* here is a function that
@@ -91,7 +93,7 @@ fun x "add" y int: int => x + y
 // matching
 
 fun shape "area"
-    | #rectangle(@width float; @height float) -> width * height
+    | #rectangle(@width float, @height float) -> width * height
     | #circle(inputData computeRadius) -> knownArea
     | #circle @radius -> 3.14 * radius ^ 2
     | _ -> 0    // Default or unrecognized shape
@@ -99,7 +101,7 @@ fun shape "area"
 // conditions inside a function
 
 fun size any^3 "cubeVolume" do
-    def (x; y; z) = size
+    def (x, y, z) = size
     y = 0 ?
         0
     else {
@@ -111,14 +113,14 @@ when
 end
 
 // doing things on a tuple
-(2; 3) reduce (+)
+(2, 3) reduce (+)
 
-(2; 3) case (@x; @y) -> x + y
-(2; 3)
-| (@x; @y) -> x + y
+(2, 3) case (@x, @y) -> x + y
+(2, 3)
+| (@x, @y) -> x + y
 
-(2; 3) :point {
-    def (x; y) = point
+(2, 3) :point {
+    def (x, y) = point
     return x + y
 }
 
@@ -153,7 +155,7 @@ fun identifier "locale" do
     }
 end
 
-def fixed = {| size: 15; frac: 0; group: yes; locale: () |}
+def fixed = {| size: 15, frac: 0, group: yes, locale: () |}
 fun value float "as" format do
 
 end
@@ -180,7 +182,7 @@ fun n int "factorial" =>
     n < 0 ? #err "Expecting positive number"
     else
         n
-        | 0; 1 -> 1
+        | 0, 1 -> 1
         other n * ((n - 1) factorial)
 
 fun n int "factorial"
@@ -193,7 +195,7 @@ fun list [[@T]] "flat": [@T] =>
 
 1..=3 {*} 1..=3 // all 9 positions in a 3x3 square
 
-[[1; 2; 3]; [4; 5; 6]] flat // 1..=6 list
+[[1, 2, 3], [4, 5, 6]] flat // 1..=6 list
 
 var _localeCount = 0 // private static variable of module
 

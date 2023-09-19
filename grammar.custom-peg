@@ -50,9 +50,9 @@ var
 names = i:identifiers => #NAMES { identifiers:i }
 
 deconstruct
-    = "(" __ hd:deconstructElement tl:(_ ";" __ e:deconstructElement => e)* __ ")"
+    = "(" __ hd:deconstructElement tl:(_ "," __ e:deconstructElement => e)* __ ")"
         => #DECONSTRUCT_TUPLE { elements: hd::tl }
-    / "{|" __ hd:deconstructMember tl:(_ ";" __ e:deconstructMember => e)* __ "|}"
+    / "{|" __ hd:deconstructMember tl:(_ "," __ e:deconstructMember => e)* __ "|}"
         => #DECONSTRUCT_RECORD { elements: hd::tl }
 
 deconstructMember
@@ -143,7 +143,7 @@ loop
         => #WHILE { condition, body }
 
 optionWithPipe
-    = value:pipedExpr option:(ternary / case / keyValue / wiseBlock)? {
+    = value:pipedExpr option:(ternary / case / wiseBlock)? {
         if (option) {
             option.key = value
             return option
@@ -153,7 +153,7 @@ optionWithPipe
     }
 
 optionNoPipe
-    = value:valueExpr option:(ternary / keyValue / wiseBlock)? {
+    = value:valueExpr option:(ternary / wiseBlock)? {
         if (option) {
             option.key = value
             return option
@@ -170,10 +170,6 @@ wiseBlock
             statements
         }
     }
-
-keyValue
-    = _ "->" __ value:valueExpr
-        => #DICT_KEY_VALUE { value }
 
 ternary
     = __ "?" __ ifTrue:(branch / inlineBlock / return) ifFalse:(__ "else" __ v:(branch / inlineBlock / return) => v)?
@@ -193,7 +189,7 @@ caseBody
     }
 
 caseOption
-    = hd:pattern tl:(_ ";" __ p:pattern => p)* __ "->" __ value:(branch / inlineBlock / return)
+    = hd:pattern tl:(_ "," __ p:pattern => p)* __ "->" __ value:(branch / inlineBlock / return)
         => #CASE_OPTION { patterns: hd::tl, value }
 inlineBlock
     = "{" !(([-+&*^] / [><] "="?) "}") __ statements:statements? __ "}"
@@ -248,7 +244,7 @@ comparisonPattern
     = operator:(">" / ">=" / $("<" ![>|]) / "<=" / "in") _ value:aboveComparison
 
 tuplePattern
-    = "(" startEllipsis:(_ "...")? __ hd:pattern tl:(_ ";" __ v:pattern => v)* __
+    = "(" startEllipsis:(_ "...")? __ hd:pattern tl:(_ "," __ v:pattern => v)* __
     endEllipsis:("..." _)? close:")"? {
         if (!close) {
             if (tl.length > 0)
@@ -264,7 +260,7 @@ tuplePattern
 recPattern
     = "{|" _ ellipsis:("..." _)? "|}"
         => #REC_VALUE { members: [], ellipsis: !!ellipsis }
-    / "{|" __ hd:recMemberPattern tl:(_ ";" __ m:recMemberPattern => m)* __
+    / "{|" __ hd:recMemberPattern tl:(_ "," __ m:recMemberPattern => m)* __
     ellipsis:("..." _)? close:"|}"? {
         if (!close) error("Expecting \"|\x7d\" to close the record")
         return #REC_VALUE { members: hd::tl, ellipsis: !!ellipsis }
@@ -278,7 +274,7 @@ listPattern
     = "[" _ ellipsis:("..." _)? "]"
         => #LIST { values: [], startEllipsis: false, endEllipsis: !!ellipsis }
 
-    / "[" startEllipsis:(_ "...")? _ hd:pattern tl:(_ ";" __ v:pattern => v)*
+    / "[" startEllipsis:(_ "...")? _ hd:pattern tl:(_ "," __ v:pattern => v)*
     __ endEllipsis:("..." _)? close:"]"? {
         if (!close) error("Expecting \"]\" to close the list")
         return tl.length > 0
@@ -290,7 +286,7 @@ setPattern
     = "set" _ "{" _ ellipsis:("..." _)? "}"
         => #SET { values: [], ellipsis: !!ellipsis }
 
-    / "set" _ "{" __ hd:pattern tl:(_ ";" __ v:pattern => v)* __ ellipsis:("..." _)? close:"}"? {
+    / "set" _ "{" __ hd:pattern tl:(_ "," __ v:pattern => v)* __ ellipsis:("..." _)? close:"}"? {
         if (!close) error("Expecting \"\x7d\" to close the set")
         return tl.length > 0
             ? #SET { values: hd::tl, ellipsis: !!ellipsis }
@@ -301,7 +297,7 @@ dictPattern
     = "dict" _ "{" _ ellipsis:("..." _)? "}"
         => #DICT_VALUE { elements: [], ellipsis: !!ellipsis }
 
-    / "dict" _ "{" __ hd:dictKeyPattern tl:(_ ";" __ m:dictKeyPattern => m)
+    / "dict" _ "{" __ hd:dictKeyPattern tl:(_ "," __ m:dictKeyPattern => m)
     __ ellipsis:("..." _)? close:"}"? {
         if (!close) error("Expecting \"\x7d\" to close the dictionary")
         return #DICT_VALUE { elements: hd::tl, ellipsis: !!ellipsis }
@@ -387,7 +383,7 @@ dictType
     = "dict" _ "{" __ key:tupleType _ "->" __ value:tupleType __ "}"
         => #DICT_TYPE { key, value }
 recType
-    = "{|" __ hd:recMemberType tl:((_ ";" / eol) __ m:recMemberType => m)* __ "|}"
+    = "{|" __ hd:recMemberType tl:((_ "," / eol) __ m:recMemberType => m)* __ "|}"
         => #REC_TYPE { members: hd::tl }
 recMemberType
     = regularMemberType
@@ -575,7 +571,7 @@ appendCall
         => #CALL { fun, params: params ?? [] }
 
 rightParams
-    = _ hd:call tl:(_ "," __ c:nestedCall => c)*
+    = _ hd:call tl:(_ ";" __ c:nestedCall => c)*
         => hd::tl
 
 callParam
@@ -627,9 +623,9 @@ cartesianPower
     }
 
 range
-    = first:multiplication to:(_ ".." includeLast:("=" / "<") __ last:multiplication)? {
+    = first:multiplication to:(_ op:(".." [=<] / "+..") __ lastOrCount:multiplication)? {
         if (to)
-            return #RANGE { first, last: to.last, includeLast: to.includeLast === "=" }
+            return #RANGE { first, lastOrCount: to.last, op: to.op }
         else
             return first
     }
@@ -709,7 +705,7 @@ implicitParam
     / "$" => error("Expecting letter for implicit parameter after \"$\"")
 
 tuple
-    = "(" __ hd:branch tl:(_ ";" __ v:branch => v)* close:")"? {
+    = "(" __ hd:branch tl:(_ "," __ v:branch => v)* close:")"? {
         if (!close) {
             if (tl.length > 0)
                 error("Expecting \")\" to close the tuple")
@@ -727,7 +723,7 @@ recValue
         return #REC_VALUE { members: members ?? [] }
     }
 recMembers
-    = __ hd:recMemberValue tl:(_ ";" __ m:recMemberValue => m)* __
+    = __ hd:recMemberValue tl:(_ "," __ m:recMemberValue => m)* __
 recMemberValue
     = name:id _ colon __ value:branch
         => #REC_MEMBER_VALUE { name, value }
@@ -741,7 +737,7 @@ list = "[" _ elements:listElements? _ close:"]"? {
         return #LIST { values: elements ?? [] }
     }
 listElements
-    = __ hd:(splat / branch) tl:(_ ";" __ v:(splat / branch) => v)* __
+    = __ hd:(splat / branch) tl:(_ "," __ v:(splat / branch) => v)* __
         => hd::tl
 
 set = "set" _ "{" _ elements:setElements? _ close:"}"? {
@@ -749,7 +745,7 @@ set = "set" _ "{" _ elements:setElements? _ close:"}"? {
         return #SET { values: elements ?? [] }
     }
 setElements
-    = __ hd:(splat / branch) tl:(_ ";" __ v:(splat / branch) => v)* __
+    = __ hd:(splat / branch) tl:(_ "," __ v:(splat / branch) => v)* __
         => hd::tl
 
 dictValue
@@ -758,7 +754,7 @@ dictValue
         return #DICT_VALUE { elements: elements ?? [] }
     }
 dictElements
-    = __ hd:dictKeyValue tl:(_ ";" __ m:dictKeyValue => m)* __
+    = __ hd:dictKeyValue tl:(_ "," __ m:dictKeyValue => m)* __
         => hd::tl
 dictKeyValue
     = key:valueExpr _ "->" __ value:branch
@@ -791,7 +787,7 @@ boolean
 /************* TOKENS *************/
 
 identifiers
-    = hd:id tl:(_ "," __ id:id => id)*
+    = hd:id tl:(_ "/" __ id:id => id)*
         => hd::tl
 
 id = $(!keyword "_"? [A-Za-z] [A-Za-z0-9_]*)
@@ -839,7 +835,7 @@ colon = $(":" ![=:])
 logicOp = "or" / "xor" / $("&" !"=")
 comparisonOp = $("=" !">") / "!=" / $(">" ![>=<]) / ">=" / $("<" ![>|]) / "<=" / "in";
 concatOp = $("++" !"=")
-additiveOp = $(("+" / "-") ![=>])
+additiveOp = $(("+" / "-") !([=>] / ".."))
 multiplicativeOp = $(("*" / "/" / "%") !"=")
 notOp = $("!" !"=")
 powerOp = $("^" !"=")
