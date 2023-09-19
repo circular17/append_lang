@@ -1,0 +1,74 @@
+To do :
+-------
+- reg ex (~ ?)
+- how to make sequence (yield ?)
+- dot product (** ?)
+
+ Symbols:
+ --------
+
+ \ pipe
+ ! not
+ | union type, case
+ "..." string with formatting
+ @ match capture, generic param type
+ # tag
+ $ lambda param
+ ~
+ % mod
+ & and
+ ><
+ <> empty linked list
+ / div
+ // end-of line comment
+ /* multi-line comment
+ () bracket, tuple, void
+ = definition, equality, inclusive range
+ != not equal
+ => function return
+ < less than, exclusive range
+ <= less than or equal
+ > greater than
+ ? if, voidable type
+ ?? default
+ '...'
+ ^ exponentiation
+ `
+ [] list, sequence, indexing
+ {} block, set, dictionary, record
+ + addition
+ ++ concatenation
+ * multiplication
+ **
+ , param separator
+ ; element separator
+ : record member, explicit param lambda
+ :: linked list
+ . end of statement, float, access member
+ ... match any number of operators, splat operator
+ - subtraction, negative
+ -- namespace
+ -> function type, dictionary key, match pattern
+ _ match any, private identifier
+ <<
+ >> compose
+ |>
+ <| modify record
+ [<
+ <]
+ +> append
+ *>
+ !>
+ ?>
+ %>
+ \>
+ :>
+ >/
+ {-} set difference
+ {+} set union
+ {&} set intersection
+ {*} cartesian product
+ {^} cartesian power
+ {=} set equality
+ {<} {<=} is subset of
+ {>} {>=} is superset of

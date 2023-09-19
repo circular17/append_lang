@@ -1,0 +1,874 @@
+// grammar using a custom PEG format
+// it needs to be preprocessed by grammar-preprocessor
+
+/************* MODULE STRUCTURE *************/
+
+module
+    = __ s:statements? __
+        => #MODULE { statements: s ?? [] }
+
+statements // []
+    = hd:statement tl:(statementSeparator s:statement => s)*
+        { return hd::tl.flat() }
+
+statement // [] or leaf
+    = defs
+    / vars
+    / fun
+    / typeDefs
+    / explicitBlock
+    / return
+    / branch
+
+return
+    = "return" _ value:branch
+        => #RETURN { value }
+    / "resume" => #RESUME { }
+
+statementSeparator
+    = _ d:"." " " _ => d
+    / eol
+
+defs // []
+    = "def" _ hd:def tl:(_ ";" __ d:def => d)*
+        => hd::tl
+
+def
+    = _ names:(names / deconstruct) _ type:type? _ "=" _ v:branch
+        => #CONST_DEF { names, type, value: v }
+
+vars // []
+    = "var" _ hd:var tl:(_ ";" __ v:var => v)*
+        => hd::tl
+
+var
+    = names:(names / deconstruct) _ "=" _ v:branch
+        => #VAR_DEF { names, type: null, value: v }
+    / names:(names / deconstruct) _ type:type _ v:("=" _ v:branch => v)?
+        => #VAR_DEF { names, type, value: v }
+
+names = i:identifiers => #NAMES { identifiers:i }
+
+deconstruct
+    = "(" __ hd:deconstructElement tl:(_ ";" __ e:deconstructElement => e)* __ ")"
+        => #DECONSTRUCT_TUPLE { elements: hd::tl }
+    / "{|" __ hd:deconstructMember tl:(_ ";" __ e:deconstructMember => e)* __ "|}"
+        => #DECONSTRUCT_RECORD { elements: hd::tl }
+
+deconstructMember
+    = member:id value:(_ colon __ e:deconstructElement => e)?
+        => #DECONSTRUCT_MEMBER { member, value }
+
+deconstructElement
+    = id:id => #DECONSTRUCT_NAME { name: id }
+    / deconstruct
+
+fun
+    = global:("global" _)? async:("async" _)? kind:funKind _ hd:funParam __ "\"" name:(id / overridableOp) "\"" _
+    tl:(__ p:params => p)? _ returnType:(colon __ t:type => t)? _ body:funBody
+        => #FUN_DEF {
+            kind, async: !!async, global: !!global,
+            name,
+            params: [hd].concat(tl ?? []),
+            body,
+            returnType
+        }
+
+funParam
+    = mut:("mut" _)? names:identifiers _ type:type?
+        => #FUN_PARAM_DEF { names, type, mutable: !!mut }
+    / void
+        => #FUN_PARAM_DEF {
+            names:[""],
+            type: #VOID_TYPE {}
+        }
+
+params // []
+    = hd:funParam tl:(_ ";" __ p:funParam => p)*
+        => hd::tl
+
+funKind
+    = "fun" / "sub"
+
+funBody
+    = __ "=>" __ v:branch => v
+    / __ explicitBlock
+    / case
+
+explicitBlock
+    = "do" __ s:statements? __ when:when? __ "end"
+        => #CODE_BLOCK { statements: s ?? [], when }
+
+when
+    = "when" (eol _ "|"? _ / __) c:caseBody => c
+
+lambda
+    = async:("async" _)? "=>" __ value:optionNoPipe
+        => #FUN_DEF {
+            kind: "fun", async: !!async,
+            name: null,
+            params: tree.getLambdaVariables(value),
+            body: value,
+            returnType: null
+        }
+    / async:("async" _)? colon _ params:params __ returnType:(colon _ t:type => t)? __ body:lambdaBody
+        => #FUN_DEF {
+            kind: "fun", async: !!async,
+            name: null,
+            params: params,
+            body: body,
+            returnType: returnType
+        }
+
+lambdaBody
+    = "=>" __ v:optionNoPipe => v
+    / "{" __ s:statements? __ "}"
+        => #CODE_BLOCK { statements: s ?? [] }
+    / case
+
+typeDefs // []
+    = "type" _ hd:typeDef tl:(_ ";" __ t:typeDef => t)*
+        => hd::tl
+
+typeDef
+    = _ name:id _ "=" _ type:type
+        => #TYPE_DEF { name, type }
+
+branch
+    = optionWithPipe
+    / loop
+
+loop
+    = "while" _ condition:valueExpr __ body:(branch / inlineBlock / return)
+        => #WHILE { condition, body }
+
+optionWithPipe
+    = value:pipedExpr option:(ternary / case / keyValue / wiseBlock)? {
+        if (option) {
+            option.key = value
+            return option
+        }
+        else
+            return value
+    }
+
+optionNoPipe
+    = value:valueExpr option:(ternary / keyValue / wiseBlock)? {
+        if (option) {
+            option.key = value
+            return option
+        }
+        else
+            return value
+    }
+
+wiseBlock
+    = _ "wise" __ "{" __ statements:statements __ close:"}"? {
+        if (!close)
+            error("Expecting \")\" to close the 'wise' block")
+        return #WISE_BLOCK {
+            statements
+        }
+    }
+
+keyValue
+    = _ "->" __ value:valueExpr
+        => #DICT_KEY_VALUE { value }
+
+ternary
+    = __ "?" __ ifTrue:(branch / inlineBlock / return) ifFalse:(__ "else" __ v:(branch / inlineBlock / return) => v)?
+        => #TERNARY { ifTrue, ifFalse }
+case
+    = _ ("case" __ "|"? _ / eol _ "|" _) c:caseBody => c
+
+caseBody
+    = hd:caseOption tl:(__ "|" _ o:caseOption => o)*
+    otherValue:(__ "other" __ value:(branch / inlineBlock / return) => value)? {
+        var options = hd::tl
+        if (otherValue)
+            options.push(#CASE_OPTION {
+                pattern: #CAPTURE { name: "_" },
+                value: otherValue })
+        return #CASE { options }
+    }
+
+caseOption
+    = hd:pattern tl:(_ ";" __ p:pattern => p)* __ "->" __ value:(branch / inlineBlock / return)
+        => #CASE_OPTION { patterns: hd::tl, value }
+inlineBlock
+    = "{" !(([-+&*^] / [><] "="?) "}") __ statements:statements? __ "}"
+        => #CODE_BLOCK { statements }
+
+pipedExpr
+    = option:valueExpr pipeCall:(_ "\\" __ c:appendCall => c)? {
+        if (pipeCall)
+        {
+            pipeCall.params.unshift(option)
+            return pipeCall
+        }
+        else
+            return option
+    }
+
+/************* PATTERN MATCHING *************/
+
+pattern
+    = taggedPattern
+    / valueExpr
+
+taggedPattern
+    = tag:tag value:(_ pattern)?
+        => #TAGGED_VALUE {
+            tag,
+            value: value ?? #VOID_VALUE { }
+        }
+    / linkedListPattern
+
+linkedListPattern
+    = head:untaggedPattern tail:(_ "::" __ t:linkedListPattern => t)* {
+        if (tail)
+            return #LINKED_LIST {
+                head,
+                tail
+            }
+        else
+            return head
+    }
+
+untaggedPattern
+    = capture
+    / comparisonPattern
+    / tuplePattern
+    / recPattern
+    / listPattern
+    / setPattern
+    / dictPattern
+
+comparisonPattern
+    = operator:(">" / ">=" / $("<" ![>|]) / "<=" / "in") _ value:aboveComparison
+
+tuplePattern
+    = "(" startEllipsis:(_ "...")? __ hd:pattern tl:(_ ";" __ v:pattern => v)* __
+    endEllipsis:("..." _)? close:")"? {
+        if (!close) {
+            if (tl.length > 0)
+                error("Expecting \")\" to close the tuple")
+            else
+                error("Expecting matching \")\"")
+        }
+        return tl.length > 0
+            ? #TUPLE { values: hd::tl, startEllipsis: !!startEllipsis, endEllipsis: !!endEllipsis  }
+            : hd
+        }
+
+recPattern
+    = "{|" _ ellipsis:("..." _)? "|}"
+        => #REC_VALUE { members: [], ellipsis: !!ellipsis }
+    / "{|" __ hd:recMemberPattern tl:(_ ";" __ m:recMemberPattern => m)* __
+    ellipsis:("..." _)? close:"|}"? {
+        if (!close) error("Expecting \"|\x7d\" to close the record")
+        return #REC_VALUE { members: hd::tl, ellipsis: !!ellipsis }
+    }
+
+recMemberPattern
+    = name:id _ colon __ value:pattern
+        => #REC_MEMBER_VALUE { name, value }
+
+listPattern
+    = "[" _ ellipsis:("..." _)? "]"
+        => #LIST { values: [], startEllipsis: false, endEllipsis: !!ellipsis }
+
+    / "[" startEllipsis:(_ "...")? _ hd:pattern tl:(_ ";" __ v:pattern => v)*
+    __ endEllipsis:("..." _)? close:"]"? {
+        if (!close) error("Expecting \"]\" to close the list")
+        return tl.length > 0
+            ? #LIST { values: hd::tl, startEllipsis: !!startEllipsis, endEllipsis: !!endEllipsis }
+            : hd
+    }
+
+setPattern
+    = "set" _ "{" _ ellipsis:("..." _)? "}"
+        => #SET { values: [], ellipsis: !!ellipsis }
+
+    / "set" _ "{" __ hd:pattern tl:(_ ";" __ v:pattern => v)* __ ellipsis:("..." _)? close:"}"? {
+        if (!close) error("Expecting \"\x7d\" to close the set")
+        return tl.length > 0
+            ? #SET { values: hd::tl, ellipsis: !!ellipsis }
+            : hd
+        }
+
+dictPattern
+    = "dict" _ "{" _ ellipsis:("..." _)? "}"
+        => #DICT_VALUE { elements: [], ellipsis: !!ellipsis }
+
+    / "dict" _ "{" __ hd:dictKeyPattern tl:(_ ";" __ m:dictKeyPattern => m)
+    __ ellipsis:("..." _)? close:"}"? {
+        if (!close) error("Expecting \"\x7d\" to close the dictionary")
+        return #DICT_VALUE { elements: hd::tl, ellipsis: !!ellipsis }
+    }
+
+dictKeyPattern
+    = key:valueExpr _ "->" __ value:pattern
+        => #DICT_KEY_VALUE { key, value }
+
+capture
+    = "@" id:id type:(_ t:type => t)?
+        => #CAPTURE {
+            name: id,
+            type: type ?? #ANY_TYPE { }
+        }
+    / id:"_" => #CAPTURE { name: id } // any value
+
+/************* TYPE DEFINITIONS *************/
+
+type = unionType
+
+unionType
+    = hd:taggedType tl:(_ "|" __ t:taggedType => t)* {
+        return tl.length > 0
+            ? #UNION_TYPE { params: hd::tl }
+            : hd }
+
+taggedType
+    = tag:tag type:(_ t:taggedType => t)?
+        => #TAGGED_TYPE {
+            tag,
+            type: type ?? #VOID_TYPE { }
+        }
+    / functionType
+
+functionType
+    = hd:inheritance tl:(_ "->" __ t:inheritance => t)* {
+        return tl.length > 0
+            ? #FUN_TYPE { params: hd::tl }
+            : hd }
+
+inheritance
+    = hd:tupleType tl:(_ "++" __ tupleType)* {
+        return tl.length > 0
+            ? #INHERITANCE { records: hd::tl }
+            : hd
+    }
+
+tupleType
+    = hd:tuplePowerType tl:(_ "*" __ t:tuplePowerType => t)* {
+        return tl.length > 0
+            ? #TUPLE_TYPE { types: hd::tl }
+            : hd }
+tuplePowerType
+    = base:voidableType power:(_ powerOp __ i:integer => i)? {
+        return power
+            ? #TUPLE_POWER_TYPE { base, power }
+            : base }
+voidableType
+    = nonVoidable:nonVoidableType isVoidable:"?"? {
+        return isVoidable
+            ? #VOIDABLE_TYPE { type: nonVoidable }
+            : nonVoidable }
+nonVoidableType
+    = namedType
+    / anyType
+    / genericParamType
+    / listType
+    / linkedListType
+    / seqType
+    / setType
+    / dictType
+    / recType
+    / voidType
+    / "(" __ t:type __ ")" => t
+
+listType = "[" __ elementType:type __ "]" => #LIST_TYPE { type: elementType }
+linkedListType = "::" _ elementType:type => #LINKED_LIST_TYPE { type: elementType }
+seqType = "seq" _ "[" __ elementType:type __ "]" => #SEQ_TYPE { type: elementType }
+setType = "set" _ "{" __ elementType:type __ "}" => #SET_TYPE { type: elementType }
+
+dictType
+    = "dict" _ "{" __ key:tupleType _ "->" __ value:tupleType __ "}"
+        => #DICT_TYPE { key, value }
+recType
+    = "{|" __ hd:recMemberType tl:((_ ";" / eol) __ m:recMemberType => m)* __ "|}"
+        => #REC_TYPE { members: hd::tl }
+recMemberType
+    = regularMemberType
+    / propDef
+    / constructor
+
+regularMemberType
+    = modifier:recMemberModifier? _ names:identifiers _ type:type?
+    defaultValue:(_ "=" __ value:valueExpr => value)?
+        => #REC_MEMBER_TYPE { modifier, names, type, defaultValue }
+recMemberModifier
+    = "const" / "base" / "init" / "var"
+
+propDef
+    = "prop" _ name:id _ type:type? __ getter:getterBody setter:setter?
+        => #PROP_DEF {
+            name,
+            type,
+            getter,
+            setter
+        }
+setter
+    = __ "set" _ body:lambda => body
+getterBody
+    = "=>" __ v:branch => v
+    / "{" __ s:statements? __ "}"
+        => #CODE_BLOCK { statements: s ?? [] }
+
+constructor
+    = async:("async" _)? "new" returnType:(_ "|" _ t:type => t)? body:constructorBody
+        => #FUN_DEF {
+            kind: "sub", name: "new",
+            async: !!async,
+            params: [],
+            body,
+            returnType
+        }
+constructorBody
+    = __ s:statements? __ when:when? __ "end"
+        => #CODE_BLOCK { statements: s ?? [], when }
+
+voidType = void => #VOID_TYPE {}
+
+namedType = valueByName
+genericParamType = "@" id:id => #GENERIC_PARAM_TYPE { name: id }
+anyType = "any" => #ANY_TYPE {}
+
+/************* EXPRESSIONS *************/
+
+valueExpr = assignment
+
+assignment
+    = variable:default assign:assignValue? {
+        if (assign)
+        {
+            assign.variable = variable
+            return assign
+        }
+        else
+            return variable
+    }
+
+assignValue
+    = _ op:assignmentOp __ value:branch
+        => #ASSIGN { operator: op, value }
+
+default = hd:disjunction tl:(__ "??" __ d:default => d)* {
+        return tl.length > 0
+            ? #DEFAULT_VALUE { values: hd::tl }
+            : hd
+    }
+
+disjunction
+    = hd:xor tl:(__ "or" __ o:xor => o)* {
+        return tl.length > 0
+            ? #DISJUNCTION { operands: hd::tl }
+            : hd
+        }
+xor
+    = hd:conjunction tl:(__ "xor" __ o:conjunction => o)* {
+        return tl.length > 0
+            ? #XOR { operands: hd::tl }
+            : hd
+        }
+conjunction
+    = hd:comparison tl:(__ "&" !"=" __ o:comparison => o)* {
+        return tl.length > 0
+            ? #CONJUNCTION { operands: hd::tl }
+            : hd
+        }
+
+comparison
+    = firstOperand:aboveComparison otherOperands:otherComparisonOperand* {
+        return otherOperands.length > 0
+            ? #COMPARISON {
+                operands: [#COMPARISON_OPERAND { operator: null, value: firstOperand }].concat(otherOperands)
+            }
+            : firstOperand
+        }
+otherComparisonOperand
+    = __ operator:comparisonOp __ operand:aboveComparison
+        => #COMPARISON_OPERAND { operator, value: operand }
+
+aboveComparison = setComparison
+
+setComparison
+    = firstOperand:aboveSetComparison otherOperands:otherSetComparisonOperand* {
+        return otherOperands.length > 0
+            ? #SET_COMPARISON {
+                operands: [#SET_COMPARISON_OPERAND { operator: null, value: firstOperand }].concat(otherOperands)
+            }
+            : firstOperand
+        }
+otherSetComparisonOperand
+    = _ operator:setComparisonOp __ operand:aboveSetComparison
+        => #SET_COMPARISON_OPERAND { operator, value: operand }
+
+aboveSetComparison = linkedList
+
+linkedList
+    = head:modifyRec tail:(__ "::" __ tl:linkedList => tl)? {
+        if (tail)
+            return #LINKED_LIST { head, tail }
+        else
+            return head
+    }
+
+modifyRec
+    = set:concat changes:(__ "<|" _ hd:modifyMember tl:(__ "<|" c:modifyMember => c)* => hd::tl)* {
+        if (changes.length > 0)
+            return #MODIFY_REC { set, changes }
+        else
+            return set
+    }
+
+modifyMember
+    = name:id _ colon __ value:valueExpr
+        => #REC_MEMBER_VALUE { name, value }
+    / "!" _ name:id
+        => #REC_MEMBER_VALUE { name, value: null } // remove
+
+concat
+    = hd:addition tl:(__ concatOp __ other:addition => other)* {
+        return tl.length > 0
+            ? #CONCAT { operands: hd::tl }
+            : hd
+        }
+
+addition
+    = hd:firstTerm tl:otherTerm* {
+        return tl.length > 0 || hd.sign !== "+"
+            ? #ADDITION { terms: hd::tl }
+            : hd.value
+        }
+firstTerm
+    = sign:additiveOp? _ term:term
+        => #TERM { sign:sign ?? "+", value:term }
+
+otherTerm
+    = _ sign:additiveOp __ term:term
+        => #TERM { sign, value:term }
+
+term = call
+
+call
+    = c:nestedCall {
+        if (tree.isNodeOf(tree.MUTABLE_PARAM))
+            error("Mutable keyword can only used to pass parameters")
+        return c
+    }
+
+nestedCall
+    = left:callParam appendCall:appendCall? {
+        if (appendCall)
+        {
+            appendCall.params.unshift(left)
+            return appendCall
+        }
+        else
+            return left
+    }
+
+appendCall
+    = _ fun:(multiplication / "new") params:rightParams?
+        => #CALL { fun, params: params ?? [] }
+
+rightParams
+    = _ hd:call tl:(_ "," __ c:nestedCall => c)*
+        => hd::tl
+
+callParam
+    = mut:"mut"? _ value:setDiff {
+        if (mut)
+            return #MUTABLE_PARAM { value }
+        else
+            return value
+    }
+
+setDiff
+    = hd:setUnion tl:(__ "{-}" __ t:setUnion => t)* {
+        if (tl.length > 0)
+            return #SET_DIFF { sets: hd::tl }
+        else
+            return hd
+    }
+
+setUnion
+    = hd:setInter tl:(__ "{+}" __ t:setInter => t)* {
+          if (tl.length > 0)
+              return #SET_UNION { sets: hd::tl }
+          else
+              return hd
+      }
+
+setInter
+    = hd:cartesianProd tl:(__ "{&}" __ t:cartesianProd => t)* {
+          if (tl.length > 0)
+              return #SET_INTER { sets: hd::tl }
+          else
+              return hd
+      }
+
+cartesianProd
+    = hd:range tl:(__ "{*}" __ r:range => r)* {
+        if (tl.length > 0)
+            return #CARTESIAN_PROD { sets: hd::tl }
+        else
+            return hd
+    }
+
+cartesianPower
+    = base:range power:(_ "{^}" __ r:range => r)* {
+        if (tl.length > 0)
+            return #CARTESIAN_POWER { base, power }
+        else
+            return hd
+    }
+
+range
+    = first:multiplication to:(_ ".." includeLast:("=" / "<") __ last:multiplication)? {
+        if (to)
+            return #RANGE { first, last: to.last, includeLast: to.includeLast === "=" }
+        else
+            return first
+    }
+
+multiplication
+    = hd:factor tl:otherFactor* {
+        return tl.length > 0
+            ? #MULTIPLICATION {
+                factors: [#FACTOR { operator:"*", value:hd }].concat(tl)
+            }
+            : hd
+        }
+otherFactor
+    = __ operator:multiplicativeOp __ factor:factor
+        => #FACTOR { operator, value:factor }
+factor
+    = not
+    / exponentiation;
+
+not = notOp f:factor
+    => #NOT { value:f }
+
+exponentiation
+    = base:indexing power:(_ powerOp __ p:indexing => p)? {
+        return power
+            ? #EXPONENTIATION { base, power }
+            : base
+        }
+
+indexing
+    = list:compose index:(_ "[" __ i:branch __ "]" => i)? {
+        return index
+            ? #INDEXING { list, index }
+            : list
+        }
+
+compose
+    = hd:taggedAtom tl:(_ composeOp __ taggedAtom)* {
+        if (tl.length > 0)
+            return #COMPOSE { functions: hd::tl }
+        else
+            return hd
+    }
+
+/************* ATOMS *************/
+
+taggedAtom
+    = tag:tag value:(__ v:taggedAtom => v)?
+        => #TAGGED_VALUE { tag, value }
+    / atom
+
+atom
+    = operatorFun
+    / tuple
+    / recValue
+    / list
+    / set
+    / dictValue
+    / float
+    / string
+    / getMember
+    / lambda
+    / voidValue
+    / boolean
+
+operatorFun
+    = "(" op:overridableOp ")"
+        => #VALUE_BY_NAME { op }
+
+voidValue
+    = void => #VOID_VALUE {}
+    / "<>" => #EMPTY_LINKED_LIST {}
+
+implicitParam
+    = "$" [a-z]
+        => #IMPLICIT_PARAM { name: text() }
+    / "$" => error("Expecting letter for implicit parameter after \"$\"")
+
+tuple
+    = "(" __ hd:branch tl:(_ ";" __ v:branch => v)* close:")"? {
+        if (!close) {
+            if (tl.length > 0)
+                error("Expecting \")\" to close the tuple")
+            else
+                error("Expecting matching \")\"")
+        }
+        return tl.length > 0
+            ? #TUPLE { values: hd::tl }
+            : hd
+        }
+
+recValue
+    = "{|" _ members:recMembers? _ close:"|}"? {
+        if (!close) error("Expecting \"|\x7d\" to close the record")
+        return #REC_VALUE { members: members ?? [] }
+    }
+recMembers
+    = __ hd:recMemberValue tl:(_ ";" __ m:recMemberValue => m)* __
+recMemberValue
+    = name:id _ colon __ value:branch
+        => #REC_MEMBER_VALUE { name, value }
+    / splat
+splat
+    = "..." value:valueByName
+        => #SPLAT { value }
+
+list = "[" _ elements:listElements? _ close:"]"? {
+        if (!close) error("Expecting \"]\" to close the list")
+        return #LIST { values: elements ?? [] }
+    }
+listElements
+    = __ hd:(splat / branch) tl:(_ ";" __ v:(splat / branch) => v)* __
+        => hd::tl
+
+set = "set" _ "{" _ elements:setElements? _ close:"}"? {
+        if (!close) error("Expecting \"\x7d\" to close the set")
+        return #SET { values: elements ?? [] }
+    }
+setElements
+    = __ hd:(splat / branch) tl:(_ ";" __ v:(splat / branch) => v)* __
+        => hd::tl
+
+dictValue
+    = "dict" _ "{" _ elements:dictElements? _ close:"}"? {
+        if (!close) error("Expecting \"\x7d\" to close the dictionary")
+        return #DICT_VALUE { elements: elements ?? [] }
+    }
+dictElements
+    = __ hd:dictKeyValue tl:(_ ";" __ m:dictKeyValue => m)* __
+        => hd::tl
+dictKeyValue
+    = key:valueExpr _ "->" __ value:branch
+        => #DICT_KEY_VALUE { key, value }
+    / splat
+
+getMember
+    = container:(valueByName / implicitParam)
+    path:("." id:(id / "new") => id)* {
+        if (path.length > 0)
+            return #GET_MEMBER { container, path }
+        else
+            return container
+    }
+    / path:("." id:id => id)+ {
+        return #GET_WISE_MEMBER { path }
+    }
+
+valueByName
+    = hd:id tl:("--" id:id => id)* {
+        let ids = hd::tl
+        const name = ids.pop()
+        return #VALUE_BY_NAME { name, namespace: ids }
+    }
+
+boolean
+    = value:("yes" / "no")
+        => #BOOLEAN { value: value === "yes" }
+
+/************* TOKENS *************/
+
+identifiers
+    = hd:id tl:(_ "," __ id:id => id)*
+        => hd::tl
+
+id = $(!keyword "_"? [A-Za-z] [A-Za-z0-9_]*)
+
+tag
+    = $("#" "_"? [A-Za-z] [A-Za-z0-9_]*)
+
+integer = [0-9] [0-9_]* ([eE] "+"? [0-9]+)?
+    => #INTEGER { value: BigInt(text()) }
+
+float = beforePoint:$([0-9] [0-9_]*) afterPoint:$("." [0-9] [0-9_]*)? expPart:$([eE] [+-]? [0-9]+)? {
+        if (afterPoint || expPart && expPart.includes("-") )
+            return #FLOAT { value: parseFloat(text()) }
+        else
+        {
+            if (expPart)
+            {
+                const expValue = expPart.substring(1)
+                const factor = BigInt(10) ** BigInt(expValue)
+                return #INTEGER { value: BigInt(beforePoint) * factor }
+            }
+            else
+                return #INTEGER { value: BigInt(text()) }
+        }
+    }
+
+void = "()"
+
+_ = [ \t]*
+__ = ([ \t\r\n] / comment)*
+comment
+    = "//" [^\r\n]*
+    / "/*" (!"*/" .)* "*/"
+eol = ([ \t] / comment)* "\r"? "\n" __
+
+keyword = ("def" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return"
+    / "new" / "const" / "init" / "base" / "prop"
+    / "type" / "any" / "seq" / "set" / "dict" / "yes" / "no"
+    / "wise" / "else" / "while" / "case" / "other" / "when" / "resume"
+    / "in" / "or" / "xor" / "on" / "global" / "async" / "defer") ![A-Za-z0-9_]
+
+assignmentOp = ":=" / "*=" / "/=" / "%=" / "+=" / "-=" / "++="
+colon = $(":" ![=:])
+
+logicOp = "or" / "xor" / $("&" !"=")
+comparisonOp = $("=" !">") / "!=" / $(">" ![>=<]) / ">=" / $("<" ![>|]) / "<=" / "in";
+concatOp = $("++" !"=")
+additiveOp = $(("+" / "-") ![=>])
+multiplicativeOp = $(("*" / "/" / "%") !"=")
+notOp = $("!" !"=")
+powerOp = $("^" !"=")
+composeOp = $(">>" !"=")
+setComparisonOp = "{=}" / "{<}" / "{<=}" / "{>}" / "{>=}"
+setOp = "{-}" / "{+}" / "{&}" / "{*}" / "{^}"
+tildeOp = "~" // unused
+overridableOp
+    = logicOp
+    / comparisonOp
+    / concatOp
+    / additiveOp
+    / multiplicativeOp
+    / notOp
+    / powerOp
+    / composeOp
+    / setComparisonOp
+    / setOp
+
+string = "\"" parts:(literalPart / formattedValue)*  "\""
+    => #STRING_VALUE { parts }
+
+literalPart = chars:literalChar+
+    => #STRING_PART { value: chars.join("") }
+formattedValue
+    = "{" _ value:branch _ "}"
+    => #FORMATTED_VALUE { value }
+literalChar
+    = [^"{}]
+    / "{{" => "\x7b"
+    / "}}" => "\x7d"
+    / "\"\"" => "\""

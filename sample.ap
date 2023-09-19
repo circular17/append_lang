@@ -1,0 +1,250 @@
+// "append" language examples
+var a, b = 5e10; c int = () ?? 7; d int
+var number int | float | decimal = 5.4
+var point #vec float*float = #vec (12.5; 8)
+var pointStruct #point {| x float; y float |} = {| x: 3; y: 45.4 |}
+global fun p1 #point {| x float; y float |} "+" p2 #point {| x float; y float |}
+    => #point {| x: p1.x + p2.x; y: p1.y + p2.y |}
+def {| x: myX; y: myY |} = pointStruct
+var {| x; y |} = pointStruct <| x: 4
+def xOnly = pointStruct <| !y
+pointStruct.y := 6
+def problematic str = "this {a}"
+var anything any = "hello"   // this will be inferred
+var functionVar int->int->int = => $x + $y
+
+fun text str "*" count int do
+    count < 0 ?
+        #err "Expecting positive repetition"
+    else
+        count
+        | 0 -> ""
+        | 1 -> str
+        other
+            str + str * (count - 1)
+end
+
+// function "someStuff" without parameters, return void or an error
+fun () "someStuff": () | #err any do
+    () someOperation
+    mut a add "world"
+    a[5] := "hello"
+    mut a del "goodbye"
+    () optionalStuff \ drop   // ignore the errors
+    "Processing successful" print
+when // handle implicit return values different from #done
+    | #note @message -> resume   // opting out
+    | #notNecessary @message -> "This processing is not necessary so we'll stop" print
+    | #warning @message -> {
+        "We have been warned but we will continue anyway: {message}" print
+        resume
+    }
+    | #detect @message -> {
+        "Object detected while probing: {message}" print
+        resume
+    }
+end
+
+fun mut x "inc" => x += 1
+mut a inc
+
+def square = :x => x * x
+var subroutine ()->()
+var linkedList ::int = 12::34::67
+linkedList head
+| #none -> "linked list is empty" print
+| #ok @value -> "linked list starts with {value}" print
+
+fun list ::any "length": int
+    | head::tail -> 1 + (tail length)
+    | <> -> 0
+
+var optionalList [int]? = ()
+optionalList = [1; 2; 3]
+
+var sequenceOfInt seq[int]
+
+var setOfStr set{str} = set{"a"; "b"; "c"}
+def onlyAB = setOfStr but "c"
+
+mut setOfStr add "four"
+| #done -> "four added" print
+| #dup -> "four already in set" print
+
+mut setOfStr del "four"
+| #done -> "four deleted" print
+| #none -> "four not found" print
+
+var dictionary #lookup dict{int -> str} = dict{5 -> "five"; 7 -> "seven"}
+def ZERO = 0. def ONE int = 1
+type circleF = #circle float
+def h = f >> g
+def multi = 2 add 3 squared, 4 cubed
+//def piped = 2 add 3 \ squared
+
+/* here is a function that
+ returns a fixed number */
+fun () "three" => 3
+
+fun x "add" y int: int => x + y
+
+// matching
+
+fun shape "area"
+    | #rectangle(@width float; @height float) -> width * height
+    | #circle(inputData computeRadius) -> knownArea
+    | #circle @radius -> 3.14 * radius ^ 2
+    | _ -> 0    // Default or unrecognized shape
+
+// conditions inside a function
+
+fun size any^3 "cubeVolume" do
+    def (x; y; z) = size
+    y = 0 ?
+        0
+    else {
+        def surface = x * y
+        surface * z
+    }
+when
+    _ -> #fail // hide error detail
+end
+
+// doing things on a tuple
+(2; 3) reduce (+)
+
+(2; 3) case (@x; @y) -> x + y
+(2; 3)
+| (@x; @y) -> x + y
+
+(2; 3) :point {
+    def (x; y) = point
+    return x + y
+}
+
+// iterating
+0..<10 each :j {
+    "j = {j}" print
+}
+
+0..=9 each => "n = {$n}" print
+
+var i = 0
+while i < 10 {
+    "hello" print
+    i += 1
+}
+
+// function "has"
+fun list "has" element =>
+    list index element
+    | #none -> no
+    other yes
+
+var _locales dict{(str | ()) -> any} = dict{ }
+fun identifier "locale" do
+    _locales has identifier ?
+        _locales[identifier]
+    else
+    {
+        def instance JSObject = JS--Intl--Locale new identifier
+        _locales[identifier] := instance
+        instance
+    }
+end
+
+def fixed = {| size: 15; frac: 0; group: yes; locale: () |}
+fun value float "as" format do
+
+end
+
+fixed wise {
+    "{.size} {.frac} {.group}" print
+}
+
+fun text "right" width do
+    def toPad = width - text len
+    toPad > 0 ?
+        " " repeat toPad ++ text
+    else
+        text
+end
+
+def F = fixed <| locale: "fr-FR" locale
+def amount = 2142.20
+"Your current balance is {amount as F} viewers" print
+"{amount1 as F \ right 15}" print
+"{amount2 as F \ right 15}" print
+
+fun n int "factorial" =>
+    n < 0 ? #err "Expecting positive number"
+    else
+        n
+        | 0; 1 -> 1
+        other n * ((n - 1) factorial)
+
+fun n int "factorial"
+    | < 0 -> #err "Expecting positive number"
+    | in 0..=1 -> 1
+    other n * ((n - 1) factorial)
+
+fun list [[@T]] "flat": [@T] =>
+    list reduce (++)
+
+1..=3 {*} 1..=3 // all 9 positions in a 3x3 square
+
+[[1; 2; 3]; [4; 5; 6]] flat // 1..=6 list
+
+var _localeCount = 0 // private static variable of module
+
+type Locale = {|
+    const identifier str? // voidable and readonly because not var
+    tag any = () // freely accessible, need to copy the array to modify, with default value
+
+    init _instance JS--Intl--Locale // private and readonly
+    prop calendar str => _instance.calendar // readonly via accessor
+
+    var _positive int = 0 // private read/write, with default value
+    prop positive int // public read/write via accessor
+        => _positive
+        set => $v >= 0 ? _positive := $v
+
+    new | #err str
+        // identifier will need to be set in initialization record expression
+        _instance := JS--Intl--Locale new identifier
+        _localeCount += 1
+    end
+|}
+
+// functional paradigm: not inside objects
+fun locale Locale "showInfo" do
+    "This locale is identified by: {locale.identifier}" print
+end
+
+def defaultLocale = Locale {| identifier: () |} // tag has default value
+
+type FrenchLocale = Locale ++ {|
+    base identifier = "fr-FR"
+    var croissants int
+    new
+        croissants := 3 + 5 random
+    end
+|}
+
+// replace function for specific locale
+fun locale FrenchLocale "showInfo" do
+    locale wise {
+        "This locale is identified by: {.identifier}" print
+        "There are {.croissants} croissants" print
+    }
+end
+
+fun mut locale "buyCroissant" => locale.croissants += 1 // works with any locale with croissants
+
+async sub urls "gatherData" =>
+  urls map => $u fetch defer \ wantAll // defer to not wait for result
+  | #ok dataList -> dataList processData
+  | #err e -> "There was an error in one or more fetch operations: {e}" log
+
+// async implicit await
+def entries = "phonebook.txt" readFile
