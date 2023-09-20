@@ -194,7 +194,7 @@ caseOption
     = hd:pattern tl:(_ "," __ p:pattern => p)* __ "->" __ value:(branch / inlineBlock / return)
         => #CASE_OPTION { patterns: hd::tl, value }
 inlineBlock
-    = "{" !(([-+&*^] / [><] "="?) "}") __ statements:statements? __ "}"
+    = "{" !(([-+&*^] / [><] "="? / "!=") "}") __ statements:statements? __ "}"
         => #CODE_BLOCK { statements }
 
 pipedExpr
@@ -845,7 +845,7 @@ multiplicativeOp = $(("*" / "/" / "%") !"=")
 notOp = $("!" !"=")
 powerOp = $("^" !"=")
 composeOp = $(">>" !"=")
-setComparisonOp = "{=}" / "{<}" / "{<=}" / "{>}" / "{>=}"
+setComparisonOp = "{=}" / "{!=}" / "{<}" / "{<=}" / "{>}" / "{>=}"
 setOp = "{-}" / "{+}" / "{&}" / "{*}" / "{^}"
 tildeOp = "~" // unused
 overridableOp

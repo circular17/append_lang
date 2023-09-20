@@ -1,7 +1,6 @@
 To do :
 -------
 - reg ex (~ ?)
-- how to make sequence (yield ?)
 - dot product (** ?)
 
  Symbols:
@@ -70,5 +69,6 @@ To do :
  {*} cartesian product
  {^} cartesian power
  {=} set equality
+ {!=} set inequality
  {<} {<=} is subset of
  {>} {>=} is superset of

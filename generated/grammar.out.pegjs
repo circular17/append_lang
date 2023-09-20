@@ -194,7 +194,7 @@ caseOption
     = hd:pattern tl:(_ "," __ p:pattern { return p })* __ "->" __ value:(branch / inlineBlock / return)
         { return tree.leaf(tree.CASE_OPTION, { patterns: [hd].concat(tl), value }, error) }
 inlineBlock
-    = "{" !(([-+&*^] / [><] "="?) "}") __ statements:statements? __ "}"
+    = "{" !(([-+&*^] / [><] "="? / "!=") "}") __ statements:statements? __ "}"
         { return tree.leaf(tree.CODE_BLOCK, { statements }, error) }
 
 pipedExpr
@@ -845,7 +845,7 @@ multiplicativeOp = $(("*" / "/" / "%") !"=")
 notOp = $("!" !"=")
 powerOp = $("^" !"=")
 composeOp = $(">>" !"=")
-setComparisonOp = "{=}" / "{<}" / "{<=}" / "{>}" / "{>=}"
+setComparisonOp = "{=}" / "{!=}" / "{<}" / "{<=}" / "{>}" / "{>=}"
 setOp = "{-}" / "{+}" / "{&}" / "{*}" / "{^}"
 tildeOp = "~" // unused
 overridableOp
