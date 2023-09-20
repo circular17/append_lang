@@ -391,10 +391,10 @@ recMemberType
     / constructor
 
 regularMemberType
-    = modifier:recMemberModifier? _ names:identifiers _ type:type?
+    = modifier:recMemberTypeModifier? _ names:identifiers _ type:type?
     defaultValue:(_ "=" __ value:valueExpr => value)?
         => #REC_MEMBER_TYPE { modifier, names, type, defaultValue }
-recMemberModifier
+recMemberTypeModifier
     = "const" / "base" / "init" / "var"
 
 propDef
@@ -725,9 +725,12 @@ recValue
 recMembers
     = __ hd:recMemberValue tl:(_ "," __ m:recMemberValue => m)* __
 recMemberValue
-    = name:id _ colon __ value:branch
-        => #REC_MEMBER_VALUE { name, value }
+    = modifier:(m:recMemberValueModifier _)? name:id _ colon __ value:branch
+        => #REC_MEMBER_VALUE { modifier, name, value }
     / splat
+recMemberValueModifier
+    = "const" / "var"
+
 splat
     = "..." value:valueByName
         => #SPLAT { value }

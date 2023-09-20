@@ -155,7 +155,7 @@ fun identifier "locale" do
     }
 end
 
-let fixed = {| size: 15, frac: 0, group: yes, locale: () |}
+let fixed = {| size: 15, frac: 0, group: yes, locale: (), var temp: "" |}
 fun value float "as" format do
 
 end

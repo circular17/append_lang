@@ -391,10 +391,10 @@ recMemberType
     / constructor
 
 regularMemberType
-    = modifier:recMemberModifier? _ names:identifiers _ type:type?
+    = modifier:recMemberTypeModifier? _ names:identifiers _ type:type?
     defaultValue:(_ "=" __ value:valueExpr { return value })?
         { return tree.leaf(tree.REC_MEMBER_TYPE, { modifier, names, type, defaultValue }, error) }
-recMemberModifier
+recMemberTypeModifier
     = "const" / "base" / "init" / "var"
 
 propDef
@@ -725,9 +725,12 @@ recValue
 recMembers
     = __ hd:recMemberValue tl:(_ "," __ m:recMemberValue { return m })* __
 recMemberValue
-    = name:id _ colon __ value:branch
-        { return tree.leaf(tree.REC_MEMBER_VALUE, { name, value }, error) }
+    = modifier:(m:recMemberValueModifier _)? name:id _ colon __ value:branch
+        { return tree.leaf(tree.REC_MEMBER_VALUE, { modifier, name, value }, error) }
     / splat
+recMemberValueModifier
+    = "const" / "var"
+
 splat
     = "..." value:valueByName
         { return tree.leaf(tree.SPLAT, { value }, error) }
