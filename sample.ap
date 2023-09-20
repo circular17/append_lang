@@ -266,3 +266,42 @@ let getNumbersSeq = seq :n {
     yield 3
     yield n // included in scope of lambda
 }
+
+fun lst seq->@T "tally": dict{@T -> int} do
+    var counts dict{T -> int} = dict{}
+    lst each => counts[x] = (counts[x] ?? 0) + 1 // supposing that ?? can be applied to (#some T | #none)
+    counts
+end
+
+fun keys set{@T} "associate" f @T->@U : dict{@T -> @U} do
+    var result dict{T -> U} = dict{}
+    keys each :k => result[k] = k f
+    result
+end
+
+fun ab (seq->@T)^2 "tally": dict{@T -> int*int} do
+    let (aCounts, bCounts) = ab each tally
+    let allKeys = aCounts.keys {+} bCounts.keys
+    allKeys associate :k => (aCounts[k] ?? 0, bCounts[k] ?? 0)
+end
+
+fun a seq->@T "listUnion" b seq->@T: [@T] do
+    (a, b) tally \ flatMap :k T; v int*int
+        => [k] * (v max)
+end
+
+fun a seq->@T "listDiff" b seq->@T: [@T] do
+    let aCounts = a tally
+    let bCounts = b tally
+
+    aCounts flatMap :k T; v int =>
+        [k] * ((v - (bCounts[k] ?? 0), 0) max)
+end
+
+fun a seq->@T "listInter" b seq->@T: [@T] do
+    let aCounts = a tally
+    let bCounts = b tally
+
+    aCounts flatMap :k T; v int =>
+        [k] * ((v, bCounts[k] ?? 0) min)
+end
