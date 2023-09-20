@@ -4,28 +4,20 @@
 /************* MODULE STRUCTURE *************/
 
 module
-    = __ s:statements? __
+    = __ s:moduleStatements? __
         => #MODULE { statements: s ?? [] }
 
-statements // []
-    = hd:statement tl:(statementSeparator s:statement => s)*
+moduleStatements // []
+    = hd:moduleStatement tl:(statementSeparator s:moduleStatement => s)*
         { return hd::tl.flat() }
 
-statement // [] or leaf
+moduleStatement // [] or leaf
     = defs
     / vars
-    / fun
     / typeDefs
     / explicitBlock
-    / return
+    / fun
     / branch
-
-return
-    = "return" _ value:branch
-        => #RETURN { value }
-    / "yield" _ value:branch
-            => #YIELD { value }
-    / "resume" => #RESUME { }
 
 statementSeparator
     = _ d:"." " " _ => d
@@ -65,6 +57,23 @@ deconstructElement
     = id:id => #DECONSTRUCT_NAME { name: id }
     / deconstruct
 
+typeDefs // []
+    = "type" _ hd:typeDef tl:(_ ";" __ t:typeDef => t)*
+        => hd::tl
+
+typeDef
+    = _ name:id _ "=" _ type:type
+        => #TYPE_DEF { name, type }
+
+explicitBlock
+    = "do" __ s:moduleStatements? __ when:when? __ "end"
+        => #CODE_BLOCK { statements: s ?? [], when }
+
+when
+    = "when" (eol _ "|"? _ / __) c:caseBody => c
+
+/************* FUNCTION DEFINITION *************/
+
 fun
     = global:("global" _)? async:("async" _)? kind:funKind _ hd:funParam __ "\"" name:(id / overridableOp) "\"" _
     tl:(__ p:params => p)? _ returnType:(colon __ t:type => t)? _ body:funBody
@@ -94,55 +103,29 @@ funKind
 
 funBody
     = __ "=>" __ v:branch => v
-    / __ explicitBlock
+    / __ explicitFunBlock
     / case
 
-explicitBlock
+explicitFunBlock
     = "do" __ s:statements? __ when:when? __ "end"
         => #CODE_BLOCK { statements: s ?? [], when }
 
-when
-    = "when" (eol _ "|"? _ / __) c:caseBody => c
+statements // []
+    = hd:statement tl:(statementSeparator s:statement => s)*
+        { return hd::tl.flat() }
 
-lambda
-    = async:("async" _)? kind:(m:("seq" / "sub") _ => m)? "=>" __ value:optionNoPipe
-        => #FUN_DEF {
-            kind: kind ?? "fun", async: !!async,
-            name: null,
-            params: tree.getLambdaVariables(value),
-            body: value,
-            returnType: null
-        }
-    / async:("async" _)? kind:(m:("seq" / "sub") _ => m)? colon _ params:params __ returnType:(colon _ t:type => t)? __ body:lambdaBody
-        => #FUN_DEF {
-             kind: kind ?? "fun", async: !!async,
-             name: null,
-             params: params,
-             body: body,
-             returnType: returnType
-         }
-     / async:("async" _)? "seq" __ body:lambdaBody
-        => #FUN_DEF {
-            kind: "seq", async: !!async,
-            name: null,
-            params: [],
-            body: body,
-            returnType: null
-        }
+statement // [] or leaf
+    = moduleStatement
+    / return
 
-lambdaBody
-    = "=>" __ v:optionNoPipe => v
-    / "{" __ s:statements? __ "}"
-        => #CODE_BLOCK { statements: s ?? [] }
-    / case
+return
+    = "return" _ value:branch
+        => #RETURN { value }
+    / "yield" _ value:branch
+            => #YIELD { value }
+    / "resume" => #RESUME { }
 
-typeDefs // []
-    = "type" _ hd:typeDef tl:(_ ";" __ t:typeDef => t)*
-        => hd::tl
-
-typeDef
-    = _ name:id _ "=" _ type:type
-        => #TYPE_DEF { name, type }
+/************* BRANCHING *************/
 
 branch
     = optionWithPipe
@@ -187,6 +170,12 @@ ternary
 case
     = _ ("case" __ "|"? _ / eol _ "|" _) c:caseBody => c
 
+inlineBlock
+    = "{" !(([-+&*^] / [><] "="? / "!=") "}") __ statements:statements? __ "}"
+        => #CODE_BLOCK { statements }
+
+/************* PATTERN MATCHING *************/
+
 caseBody
     = hd:caseOption tl:(__ "|" _ o:caseOption => o)*
     otherValue:(__ "other" __ value:(branch / inlineBlock / return) => value)? {
@@ -201,22 +190,6 @@ caseBody
 caseOption
     = hd:pattern tl:(_ "," __ p:pattern => p)* __ "->" __ value:(branch / inlineBlock / return)
         => #CASE_OPTION { patterns: hd::tl, value }
-inlineBlock
-    = "{" !(([-+&*^] / [><] "="? / "!=") "}") __ statements:statements? __ "}"
-        => #CODE_BLOCK { statements }
-
-pipedExpr
-    = option:valueExpr pipeCall:(_ "\\" __ c:appendCall => c)? {
-        if (pipeCall)
-        {
-            pipeCall.params.unshift(option)
-            return pipeCall
-        }
-        else
-            return option
-    }
-
-/************* PATTERN MATCHING *************/
 
 pattern
     = taggedPattern
@@ -430,6 +403,38 @@ getterBody
     / "{" __ s:statements? __ "}"
         => #CODE_BLOCK { statements: s ?? [] }
 
+lambda
+    = async:("async" _)? kind:(m:("seq" / "sub") _ => m)? "=>" __ value:optionNoPipe
+        => #FUN_DEF {
+            kind: kind ?? "fun", async: !!async,
+            name: null,
+            params: tree.getLambdaVariables(value),
+            body: value,
+            returnType: null
+        }
+    / async:("async" _)? kind:(m:("seq" / "sub") _ => m)? colon _ params:params __ returnType:(colon _ t:type => t)? __ body:lambdaBody
+        => #FUN_DEF {
+             kind: kind ?? "fun", async: !!async,
+             name: null,
+             params: params,
+             body: body,
+             returnType: returnType
+         }
+     / async:("async" _)? "seq" __ body:lambdaBody
+        => #FUN_DEF {
+            kind: "seq", async: !!async,
+            name: null,
+            params: [],
+            body: body,
+            returnType: null
+        }
+
+lambdaBody
+    = "=>" __ v:optionNoPipe => v
+    / "{" __ s:statements? __ "}"
+        => #CODE_BLOCK { statements: s ?? [] }
+    / case
+
 constructor
     = async:("async" _)? "new" returnType:(_ "|" _ t:type => t)? body:constructorBody
         => #FUN_DEF {
@@ -450,6 +455,17 @@ genericParamType = "@" id:id => #GENERIC_PARAM_TYPE { name: id }
 anyType = "any" => #ANY_TYPE {}
 
 /************* EXPRESSIONS *************/
+
+pipedExpr
+    = option:valueExpr pipeCall:(_ "\\" __ c:appendCall => c)? {
+        if (pipeCall)
+        {
+            pipeCall.params.unshift(option)
+            return pipeCall
+        }
+        else
+            return option
+    }
 
 valueExpr = assignment
 

@@ -4,28 +4,20 @@
 /************* MODULE STRUCTURE *************/
 
 module
-    = __ s:statements? __
+    = __ s:moduleStatements? __
         { return tree.leaf(tree.MODULE, { statements: s ?? [] }, error) }
 
-statements // []
-    = hd:statement tl:(statementSeparator s:statement { return s })*
+moduleStatements // []
+    = hd:moduleStatement tl:(statementSeparator s:moduleStatement { return s })*
         { return [hd].concat(tl).flat() }
 
-statement // [] or leaf
+moduleStatement // [] or leaf
     = defs
     / vars
-    / fun
     / typeDefs
     / explicitBlock
-    / return
+    / fun
     / branch
-
-return
-    = "return" _ value:branch
-        { return tree.leaf(tree.RETURN, { value }, error) }
-    / "yield" _ value:branch
-            { return tree.leaf(tree.YIELD, { value }, error) }
-    / "resume" { return tree.leaf(tree.RESUME, { }, error) }
 
 statementSeparator
     = _ d:"." " " _ { return d }
@@ -65,6 +57,23 @@ deconstructElement
     = id:id { return tree.leaf(tree.DECONSTRUCT_NAME, { name: id }, error) }
     / deconstruct
 
+typeDefs // []
+    = "type" _ hd:typeDef tl:(_ ";" __ t:typeDef { return t })*
+        { return [hd].concat(tl) }
+
+typeDef
+    = _ name:id _ "=" _ type:type
+        { return tree.leaf(tree.TYPE_DEF, { name, type }, error) }
+
+explicitBlock
+    = "do" __ s:moduleStatements? __ when:when? __ "end"
+        { return tree.leaf(tree.CODE_BLOCK, { statements: s ?? [], when }, error) }
+
+when
+    = "when" (eol _ "|"? _ / __) c:caseBody { return c }
+
+/************* FUNCTION DEFINITION *************/
+
 fun
     = global:("global" _)? async:("async" _)? kind:funKind _ hd:funParam __ "\"" name:(id / overridableOp) "\"" _
     tl:(__ p:params { return p })? _ returnType:(colon __ t:type { return t })? _ body:funBody
@@ -94,55 +103,29 @@ funKind
 
 funBody
     = __ "=>" __ v:branch { return v }
-    / __ explicitBlock
+    / __ explicitFunBlock
     / case
 
-explicitBlock
+explicitFunBlock
     = "do" __ s:statements? __ when:when? __ "end"
         { return tree.leaf(tree.CODE_BLOCK, { statements: s ?? [], when }, error) }
 
-when
-    = "when" (eol _ "|"? _ / __) c:caseBody { return c }
+statements // []
+    = hd:statement tl:(statementSeparator s:statement { return s })*
+        { return [hd].concat(tl).flat() }
 
-lambda
-    = async:("async" _)? kind:(m:("seq" / "sub") _ { return m })? "=>" __ value:optionNoPipe
-        { return tree.leaf(tree.FUN_DEF, {
-            kind: kind ?? "fun", async: !!async,
-            name: null,
-            params: tree.getLambdaVariables(value),
-            body: value,
-            returnType: null
-        }, error) }
-    / async:("async" _)? kind:(m:("seq" / "sub") _ { return m })? colon _ params:params __ returnType:(colon _ t:type { return t })? __ body:lambdaBody
-        { return tree.leaf(tree.FUN_DEF, {
-             kind: kind ?? "fun", async: !!async,
-             name: null,
-             params: params,
-             body: body,
-             returnType: returnType
-         }, error) }
-     / async:("async" _)? "seq" __ body:lambdaBody
-        { return tree.leaf(tree.FUN_DEF, {
-            kind: "seq", async: !!async,
-            name: null,
-            params: [],
-            body: body,
-            returnType: null
-        }, error) }
+statement // [] or leaf
+    = moduleStatement
+    / return
 
-lambdaBody
-    = "=>" __ v:optionNoPipe { return v }
-    / "{" __ s:statements? __ "}"
-        { return tree.leaf(tree.CODE_BLOCK, { statements: s ?? [] }, error) }
-    / case
+return
+    = "return" _ value:branch
+        { return tree.leaf(tree.RETURN, { value }, error) }
+    / "yield" _ value:branch
+            { return tree.leaf(tree.YIELD, { value }, error) }
+    / "resume" { return tree.leaf(tree.RESUME, { }, error) }
 
-typeDefs // []
-    = "type" _ hd:typeDef tl:(_ ";" __ t:typeDef { return t })*
-        { return [hd].concat(tl) }
-
-typeDef
-    = _ name:id _ "=" _ type:type
-        { return tree.leaf(tree.TYPE_DEF, { name, type }, error) }
+/************* BRANCHING *************/
 
 branch
     = optionWithPipe
@@ -187,6 +170,12 @@ ternary
 case
     = _ ("case" __ "|"? _ / eol _ "|" _) c:caseBody { return c }
 
+inlineBlock
+    = "{" !(([-+&*^] / [><] "="? / "!=") "}") __ statements:statements? __ "}"
+        { return tree.leaf(tree.CODE_BLOCK, { statements }, error) }
+
+/************* PATTERN MATCHING *************/
+
 caseBody
     = hd:caseOption tl:(__ "|" _ o:caseOption { return o })*
     otherValue:(__ "other" __ value:(branch / inlineBlock / return) { return value })? {
@@ -201,22 +190,6 @@ caseBody
 caseOption
     = hd:pattern tl:(_ "," __ p:pattern { return p })* __ "->" __ value:(branch / inlineBlock / return)
         { return tree.leaf(tree.CASE_OPTION, { patterns: [hd].concat(tl), value }, error) }
-inlineBlock
-    = "{" !(([-+&*^] / [><] "="? / "!=") "}") __ statements:statements? __ "}"
-        { return tree.leaf(tree.CODE_BLOCK, { statements }, error) }
-
-pipedExpr
-    = option:valueExpr pipeCall:(_ "\\" __ c:appendCall { return c })? {
-        if (pipeCall)
-        {
-            pipeCall.params.unshift(option)
-            return pipeCall
-        }
-        else
-            return option
-    }
-
-/************* PATTERN MATCHING *************/
 
 pattern
     = taggedPattern
@@ -430,6 +403,38 @@ getterBody
     / "{" __ s:statements? __ "}"
         { return tree.leaf(tree.CODE_BLOCK, { statements: s ?? [] }, error) }
 
+lambda
+    = async:("async" _)? kind:(m:("seq" / "sub") _ { return m })? "=>" __ value:optionNoPipe
+        { return tree.leaf(tree.FUN_DEF, {
+            kind: kind ?? "fun", async: !!async,
+            name: null,
+            params: tree.getLambdaVariables(value),
+            body: value,
+            returnType: null
+        }, error) }
+    / async:("async" _)? kind:(m:("seq" / "sub") _ { return m })? colon _ params:params __ returnType:(colon _ t:type { return t })? __ body:lambdaBody
+        { return tree.leaf(tree.FUN_DEF, {
+             kind: kind ?? "fun", async: !!async,
+             name: null,
+             params: params,
+             body: body,
+             returnType: returnType
+         }, error) }
+     / async:("async" _)? "seq" __ body:lambdaBody
+        { return tree.leaf(tree.FUN_DEF, {
+            kind: "seq", async: !!async,
+            name: null,
+            params: [],
+            body: body,
+            returnType: null
+        }, error) }
+
+lambdaBody
+    = "=>" __ v:optionNoPipe { return v }
+    / "{" __ s:statements? __ "}"
+        { return tree.leaf(tree.CODE_BLOCK, { statements: s ?? [] }, error) }
+    / case
+
 constructor
     = async:("async" _)? "new" returnType:(_ "|" _ t:type { return t })? body:constructorBody
         { return tree.leaf(tree.FUN_DEF, {
@@ -450,6 +455,17 @@ genericParamType = "@" id:id { return tree.leaf(tree.GENERIC_PARAM_TYPE, { name:
 anyType = "any" { return tree.leaf(tree.ANY_TYPE, {}, error) }
 
 /************* EXPRESSIONS *************/
+
+pipedExpr
+    = option:valueExpr pipeCall:(_ "\\" __ c:appendCall { return c })? {
+        if (pipeCall)
+        {
+            pipeCall.params.unshift(option)
+            return pipeCall
+        }
+        else
+            return option
+    }
 
 valueExpr = assignment
 
