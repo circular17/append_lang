@@ -115,11 +115,19 @@ lambda
         }, error) }
     / async:("async" _)? kind:(m:("seq" / "sub") _ { return m })? colon _ params:params __ returnType:(colon _ t:type { return t })? __ body:lambdaBody
         { return tree.leaf(tree.FUN_DEF, {
-            kind: kind ?? "fun", async: !!async,
+             kind: kind ?? "fun", async: !!async,
+             name: null,
+             params: params,
+             body: body,
+             returnType: returnType
+         }, error) }
+     / async:("async" _)? "seq" __ body:lambdaBody
+        { return tree.leaf(tree.FUN_DEF, {
+            kind: "seq", async: !!async,
             name: null,
-            params: params,
+            params: [],
             body: body,
-            returnType: returnType
+            returnType: null
         }, error) }
 
 lambdaBody
@@ -310,7 +318,7 @@ dictKeyPattern
         { return tree.leaf(tree.DICT_KEY_VALUE, { key, value }, error) }
 
 capture
-    = "@" id:id type:(_ t:type { return t })?
+    = "@" id:id type:(_ t:tupleType { return t })?
         { return tree.leaf(tree.CAPTURE, {
             name: id,
             type: type ?? tree.leaf(tree.ANY_TYPE, { }, error)
@@ -378,7 +386,15 @@ nonVoidableType
 
 listType = "[" __ elementType:type __ "]" { return tree.leaf(tree.LIST_TYPE, { type: elementType }, error) }
 linkedListType = "::" _ elementType:type { return tree.leaf(tree.LINKED_LIST_TYPE, { type: elementType }, error) }
-seqType = "seq" _ "[" __ elementType:type __ "]" { return tree.leaf(tree.SEQ_TYPE, { type: elementType }, error) }
+
+seqType
+    = "seq" _ hd:inheritance tl:(_ "->" __ t:inheritance { return t })* {
+        return tl.length > 0
+            ? tree.leaf(tree.SEQ_TYPE, { params: [hd].concat(tl) }, error)
+            : hd }
+    / "seq" _ "->" __ returnType:inheritance
+        { return tree.leaf(tree.SEQ_TYPE, { params: [returnType] }, error) }
+
 setType = "set" _ "{" __ elementType:type __ "}" { return tree.leaf(tree.SET_TYPE, { type: elementType }, error) }
 
 dictType

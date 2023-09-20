@@ -3,59 +3,127 @@ To do :
 - reg ex (~ ?)
 - dot product (** ?)
 
- Symbols:
- --------
+Whitespace
+----------
+ //  end-of line comment
+ /*  multi-line comment
+ ;   definition separator (or parameter separator)
+ .   end of statement (or member access)
 
- \ pipe
- ! not
- | union type, case
- "..." string with formatting
- @ match capture, generic param type
- # tag
- $ lambda param
+Identifiers
+-----------
+ _   private identifier (inside identifier)
+ /   multiple identifiers (or division)
+ --  namespace
+ .   member access (or end of statement)
+ =   definition (or equality)
+
+Comparisons
+-----------
+ =   equality (definition)
+ !=  not equal
+ <   less than
+ <=  less than or equal
+ >   greater than
+ >=  greater than or equal
+
+Arithmetic
+----------
+ %    modulo
+ /    division (multiple identifiers)
+ ^    exponentiation
+ +    addition, unary positive
+ *    multiplication
+ -    subtraction, unary negative
+ ??   default value if void
+ ?    ternary expression (OR voidable type)
+ ( )  brackets for priority (OR tuple)
+ \    pipe function call
+
+Logic
+-----
+ !    not
+ &    and
+ or   inclusive or
+ xor  exclusive or
+
+Scalar types
+------------
+ .    floating part (inside number)
+ "    string with formatting
+ '
+ { }  formatting of a value (inside string)
+ ()   void (without spacing)
+
+Composite
+---------
+ ,      element separator (inside composite)
+ ( )    tuples (or brackets for priority)
+ [ ]    list, indexing
+ ::     linked list
+ <>     empty linked list
+ { }    set, dictionary (after appropriate keyword)
+ ->     dictionary key, function type (OR if pattern match)
+ {| |}  record
+ :      record member type (after member name)
+ <|     modify record
+ ++     inheritance, concatenation
+ #      tag
+ ?      voidable type (OR ternary expression)
+ |      union type (OR case)
+ ...    splat operator of enumerable (OR match any number of elements)
+
+Ranges
+------
+ ..=  inclusive range
+ ..<  exclusive range
+ +..  range by length
+
+Functions
+---------
+ $    lambda param
+ =>   function return
+ { }  inline code block
+ ;    parameter separator (definition separator)
+ :    explicit param lambda, function result type
+ @    generic param type (in function definition)
+ >>   composition
+
+Pattern matching
+----------------
+ |    case (OR union type)
+ @    match capture (inside match branch)
+ ...  match any number of elements (OR splat operator of enumerable)
+ _    match any
+ ,    pattern separator (inside match branch)
+ ->   if pattern match (OR dictionary key, function type)
+
+Set operations
+--------------
+ {-}  set difference
+ {+}  set union
+ {&}  set intersection
+ {*}  cartesian product
+ {^}  cartesian power
+
+Set comparisons
+---------------
+ {=}       set equality
+ {!=}      set inequality
+ {<} {<=}  is subset of
+ {>} {>=}  is superset of
+
+Unassigned symbols
+------------------
  ~
- % mod
- & and
  ><
- <> empty linked list
- / div
- // end-of line comment
- /* multi-line comment
- () bracket, tuple, void
- = definition, equality, inclusive range
- != not equal
- => function return
- < less than, exclusive range
- <= less than or equal
- > greater than
- ? if, voidable type
- ?? default
- '...'
- ^ exponentiation
  `
- [] list, sequence, indexing
- {} block, set, dictionary, record
- + addition
- ++ concatenation
- * multiplication
  **
- , param separator
- ; element separator
- : record member, explicit param lambda
- :: linked list
- . end of statement, float, access member
- ... match any number of operators, splat operator
- - subtraction, negative
- -- namespace
- -> function type, dictionary key, match pattern
- _ match any, private identifier
  <<
- >> compose
  |>
- <| modify record
  [<
  <]
- +> append
+ +>
  *>
  !>
  ?>
@@ -63,12 +131,3 @@ To do :
  \>
  :>
  >/
- {-} set difference
- {+} set union
- {&} set intersection
- {*} cartesian product
- {^} cartesian power
- {=} set equality
- {!=} set inequality
- {<} {<=} is subset of
- {>} {>=} is superset of

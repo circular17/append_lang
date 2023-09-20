@@ -115,11 +115,19 @@ lambda
         }
     / async:("async" _)? kind:(m:("seq" / "sub") _ => m)? colon _ params:params __ returnType:(colon _ t:type => t)? __ body:lambdaBody
         => #FUN_DEF {
-            kind: kind ?? "fun", async: !!async,
+             kind: kind ?? "fun", async: !!async,
+             name: null,
+             params: params,
+             body: body,
+             returnType: returnType
+         }
+     / async:("async" _)? "seq" __ body:lambdaBody
+        => #FUN_DEF {
+            kind: "seq", async: !!async,
             name: null,
-            params: params,
+            params: [],
             body: body,
-            returnType: returnType
+            returnType: null
         }
 
 lambdaBody
@@ -310,7 +318,7 @@ dictKeyPattern
         => #DICT_KEY_VALUE { key, value }
 
 capture
-    = "@" id:id type:(_ t:type => t)?
+    = "@" id:id type:(_ t:tupleType => t)?
         => #CAPTURE {
             name: id,
             type: type ?? #ANY_TYPE { }
@@ -378,7 +386,15 @@ nonVoidableType
 
 listType = "[" __ elementType:type __ "]" => #LIST_TYPE { type: elementType }
 linkedListType = "::" _ elementType:type => #LINKED_LIST_TYPE { type: elementType }
-seqType = "seq" _ "[" __ elementType:type __ "]" => #SEQ_TYPE { type: elementType }
+
+seqType
+    = "seq" _ hd:inheritance tl:(_ "->" __ t:inheritance => t)* {
+        return tl.length > 0
+            ? #SEQ_TYPE { params: hd::tl }
+            : hd }
+    / "seq" _ "->" __ returnType:inheritance
+        => #SEQ_TYPE { params: [returnType] }
+
 setType = "set" _ "{" __ elementType:type __ "}" => #SET_TYPE { type: elementType }
 
 dictType
