@@ -23,6 +23,8 @@ statement // [] or leaf
 return
     = "return" _ value:branch
         { return tree.leaf(tree.RETURN, { value }, error) }
+    / "yield" _ value:branch
+            { return tree.leaf(tree.YIELD, { value }, error) }
     / "resume" { return tree.leaf(tree.RESUME, { }, error) }
 
 statementSeparator
@@ -88,7 +90,7 @@ params // []
         { return [hd].concat(tl) }
 
 funKind
-    = "fun" / "sub"
+    = "fun" / "sub" / "seq"
 
 funBody
     = __ "=>" __ v:branch { return v }
@@ -103,17 +105,17 @@ when
     = "when" (eol _ "|"? _ / __) c:caseBody { return c }
 
 lambda
-    = async:("async" _)? "=>" __ value:optionNoPipe
+    = async:("async" _)? kind:(m:("seq" / "sub") _ { return m })? "=>" __ value:optionNoPipe
         { return tree.leaf(tree.FUN_DEF, {
-            kind: "fun", async: !!async,
+            kind: kind ?? "fun", async: !!async,
             name: null,
             params: tree.getLambdaVariables(value),
             body: value,
             returnType: null
         }, error) }
-    / async:("async" _)? colon _ params:params __ returnType:(colon _ t:type { return t })? __ body:lambdaBody
+    / async:("async" _)? kind:(m:("seq" / "sub") _ { return m })? colon _ params:params __ returnType:(colon _ t:type { return t })? __ body:lambdaBody
         { return tree.leaf(tree.FUN_DEF, {
-            kind: "fun", async: !!async,
+            kind: kind ?? "fun", async: !!async,
             name: null,
             params: params,
             body: body,
@@ -826,7 +828,7 @@ comment
     / "/*" (!"*/" .)* "*/"
 eol = ([ \t] / comment)* "\r"? "\n" __
 
-keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return"
+keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return" / "yield"
     / "new" / "const" / "init" / "base" / "prop"
     / "type" / "any" / "seq" / "set" / "dict" / "yes" / "no"
     / "wise" / "else" / "while" / "case" / "other" / "when" / "resume"

@@ -250,3 +250,18 @@ async sub urls "gatherData" =>
 
 // async implicit await
 let entries = "phonebook.txt" readFile
+
+seq n int "getNumbersSeq": int do
+    var i int = 0
+    while i < n {
+        yield i
+        i += 1
+    }
+end
+
+let getNumbersSeq = seq :n {
+    yield 1
+    yield 2
+    yield 3
+    yield n // included in scope of lambda
+}

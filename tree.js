@@ -165,6 +165,7 @@ const CASE_OPTION = "CASE_OPTION"
 const CAPTURE = "CAPTURE"
 const TAGGED_VALUE = "TAGGED_VALUE"
 const RETURN = "RETURN"
+const YIELD = "YIELD"
 const COMPOSE = "COMPOSE"
 const CALL = "CALL"
 const INTEGER = "INTEGER"
@@ -256,6 +257,7 @@ leafName = {
     CAPTURE: "capture name",
     TAGGED_VALUE: "tagged value",
     RETURN: "return statement",
+    YIELD: "yield statement",
     CALL: "function call",
     INTEGER: "integer",
     FLOAT: "floating point value",
@@ -350,6 +352,7 @@ module.exports = {
     CAPTURE,
     TAGGED_VALUE,
     RETURN,
+    YIELD,
     CALL,
     INTEGER,
     FLOAT,

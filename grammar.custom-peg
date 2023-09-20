@@ -23,6 +23,8 @@ statement // [] or leaf
 return
     = "return" _ value:branch
         => #RETURN { value }
+    / "yield" _ value:branch
+            => #YIELD { value }
     / "resume" => #RESUME { }
 
 statementSeparator
@@ -88,7 +90,7 @@ params // []
         => hd::tl
 
 funKind
-    = "fun" / "sub"
+    = "fun" / "sub" / "seq"
 
 funBody
     = __ "=>" __ v:branch => v
@@ -103,17 +105,17 @@ when
     = "when" (eol _ "|"? _ / __) c:caseBody => c
 
 lambda
-    = async:("async" _)? "=>" __ value:optionNoPipe
+    = async:("async" _)? kind:(m:("seq" / "sub") _ => m)? "=>" __ value:optionNoPipe
         => #FUN_DEF {
-            kind: "fun", async: !!async,
+            kind: kind ?? "fun", async: !!async,
             name: null,
             params: tree.getLambdaVariables(value),
             body: value,
             returnType: null
         }
-    / async:("async" _)? colon _ params:params __ returnType:(colon _ t:type => t)? __ body:lambdaBody
+    / async:("async" _)? kind:(m:("seq" / "sub") _ => m)? colon _ params:params __ returnType:(colon _ t:type => t)? __ body:lambdaBody
         => #FUN_DEF {
-            kind: "fun", async: !!async,
+            kind: kind ?? "fun", async: !!async,
             name: null,
             params: params,
             body: body,
@@ -826,7 +828,7 @@ comment
     / "/*" (!"*/" .)* "*/"
 eol = ([ \t] / comment)* "\r"? "\n" __
 
-keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return"
+keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return" / "yield"
     / "new" / "const" / "init" / "base" / "prop"
     / "type" / "any" / "seq" / "set" / "dict" / "yes" / "no"
     / "wise" / "else" / "while" / "case" / "other" / "when" / "resume"
