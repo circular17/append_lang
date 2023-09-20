@@ -1896,6 +1896,9 @@ function peg$parse(input, options) {
           s5 = peg$parse__();
           if (s5 !== peg$FAILED) {
             s6 = peg$parsedeconstructElement();
+            if (s6 === peg$FAILED) {
+              s6 = peg$parsedeconstruct();
+            }
             if (s6 !== peg$FAILED) {
               peg$savedPos = s2;
               s3 = peg$c43(s1, s6);

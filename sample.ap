@@ -5,7 +5,7 @@ var point #vec float*float = #vec (12.5, 8)
 var pointStruct #point {| x float, y float |} = {| x: 3, y: 45.4 |}
 global fun p1 #point {| x float, y float |} "+" p2 #point {| x float, y float |}
     => #point {| x: p1.x + p2.x, y: p1.y + p2.y |}
-def {| x: myX, y: myY |} = pointStruct
+def {| x: myX, y: myY, coords: (a, b, c) |} = pointStruct
 var {| x, y |} = pointStruct <| x: 4
 def xOnly = pointStruct <| !y
 pointStruct.y := 6
@@ -50,7 +50,7 @@ mut a inc
 
 def square = :x => x * x
 var subroutine ()->()
-var linkedList ::int = 12::34::67
+var linkedList ::int = 12::34::67::<>
 linkedList head
 | #none -> "linked list is empty" print
 | #ok @value -> "linked list starts with {value}" print

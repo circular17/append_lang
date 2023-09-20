@@ -56,7 +56,7 @@ deconstruct
         { return tree.leaf(tree.DECONSTRUCT_RECORD, { elements: [hd].concat(tl) }, error) }
 
 deconstructMember
-    = member:id value:(_ colon __ e:deconstructElement { return e })?
+    = member:id value:(_ colon __ e:(deconstructElement / deconstruct) { return e })?
         { return tree.leaf(tree.DECONSTRUCT_MEMBER, { member, value }, error) }
 
 deconstructElement
