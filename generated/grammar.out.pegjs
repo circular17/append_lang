@@ -830,7 +830,7 @@ keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return"
     / "new" / "const" / "init" / "base" / "prop"
     / "type" / "any" / "seq" / "set" / "dict" / "yes" / "no"
     / "wise" / "else" / "while" / "case" / "other" / "when" / "resume"
-    / "in" / "or" / "xor" / "on" / "global" / "async" / "defer") ![A-Za-z0-9_]
+    / "in" / "or" / "xor" / "global" / "async" / "defer") ![A-Za-z0-9_]
 
 assignmentOp = ":=" / "*=" / "/=" / "%=" / "+=" / "-=" / "++="
 colon = $(":" ![=:])
