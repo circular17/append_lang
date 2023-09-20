@@ -30,7 +30,7 @@ statementSeparator
     / eol
 
 defs // []
-    = "def" _ hd:def tl:(_ ";" __ d:def { return d })*
+    = "let" _ hd:def tl:(_ ";" __ d:def { return d })*
         { return [hd].concat(tl) }
 
 def
@@ -567,8 +567,8 @@ nestedCall
     }
 
 appendCall
-    = _ fun:(multiplication / "new") params:rightParams?
-        { return tree.leaf(tree.CALL, { fun, params: params ?? [] }, error) }
+    = _ fun:(multiplication / "new") defer:(_ "defer")? params:rightParams?
+        { return tree.leaf(tree.CALL, { fun, defer: !!defer, params: params ?? [] }, error) }
 
 rightParams
     = _ hd:call tl:(_ ";" __ c:nestedCall { return c })*
@@ -823,7 +823,7 @@ comment
     / "/*" (!"*/" .)* "*/"
 eol = ([ \t] / comment)* "\r"? "\n" __
 
-keyword = ("def" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return"
+keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return"
     / "new" / "const" / "init" / "base" / "prop"
     / "type" / "any" / "seq" / "set" / "dict" / "yes" / "no"
     / "wise" / "else" / "while" / "case" / "other" / "when" / "resume"

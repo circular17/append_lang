@@ -5,11 +5,11 @@ var point #vec float*float = #vec (12.5, 8)
 var pointStruct #point {| x float, y float |} = {| x: 3, y: 45.4 |}
 global fun p1 #point {| x float, y float |} "+" p2 #point {| x float, y float |}
     => #point {| x: p1.x + p2.x, y: p1.y + p2.y |}
-def {| x: myX, y: myY, coords: (a, b, c) |} = pointStruct
+let {| x: myX, y: myY, coords: (a, b, c) |} = pointStruct
 var {| x, y |} = pointStruct <| x: 4
-def xOnly = pointStruct <| !y
+let xOnly = pointStruct <| !y
 pointStruct.y := 6
-def problematic str = "this {a}"
+let problematic str = "this {a}"
 var anything any = "hello"   // this will be inferred
 var functionVar int->int->int = => $x + $y
 
@@ -48,7 +48,7 @@ end
 fun mut x "inc" => x += 1
 mut a inc
 
-def square = :x => x * x
+let square = :x => x * x
 var subroutine ()->()
 var linkedList ::int = 12::34::67::<>
 linkedList head
@@ -61,13 +61,13 @@ fun list ::any "length": int
 
 var optionalList [int]? = ()
 optionalList = [1, 2, 3]
-mut optionalList insert (-12); 0
+mut optionalList ins (-12); 0
 mut optionalList del 1+..2 // range from 1, 2 elements long
 
 var sequenceOfInt seq[int]
 
 var setOfStr set{str} = set{"a", "b", "c"}
-def onlyAB = setOfStr but "c"
+let onlyAB = setOfStr but "c"
 
 mut setOfStr add "four"
 | #done -> "four added" print
@@ -78,11 +78,11 @@ mut setOfStr del "four"
 | #none -> "four not found" print
 
 var dictionary #lookup dict{int -> str} = dict{5 -> "five", 7 -> "seven"}
-def ZERO = 0. def ONE int = 1
+let ZERO = 0. let ONE int = 1
 type circleF = #circle float
-def h = f >> g
-def multi = 2 add 3 squared; 4 cubed
-//def piped = 2 add 3 \ squared
+let h = f >> g
+let multi = 2 add 3 squared; 4 cubed
+//let piped = 2 add 3 \ squared
 
 /* here is a function that
  returns a fixed number */
@@ -101,11 +101,11 @@ fun shape "area"
 // conditions inside a function
 
 fun size any^3 "cubeVolume" do
-    def (x, y, z) = size
+    let (x, y, z) = size
     y = 0 ?
         0
     else {
-        def surface = x * y
+        let surface = x * y
         surface * z
     }
 when
@@ -120,7 +120,7 @@ end
 | (@x, @y) -> x + y
 
 (2, 3) :point {
-    def (x, y) = point
+    let (x, y) = point
     return x + y
 }
 
@@ -149,13 +149,13 @@ fun identifier "locale" do
         _locales[identifier]
     else
     {
-        def instance JSObject = JS--Intl--Locale new identifier
+        let instance JSObject = JS--Intl--Locale new identifier
         _locales[identifier] := instance
         instance
     }
 end
 
-def fixed = {| size: 15, frac: 0, group: yes, locale: () |}
+let fixed = {| size: 15, frac: 0, group: yes, locale: () |}
 fun value float "as" format do
 
 end
@@ -165,15 +165,15 @@ fixed wise {
 }
 
 fun text "right" width do
-    def toPad = width - text len
+    let toPad = width - text len
     toPad > 0 ?
         " " repeat toPad ++ text
     else
         text
 end
 
-def F = fixed <| locale: "fr-FR" locale
-def amount = 2142.20
+let F = fixed <| locale: "fr-FR" locale
+let amount = 2142.20
 "Your current balance is {amount as F} viewers" print
 "{amount1 as F \ right 15}" print
 "{amount2 as F \ right 15}" print
@@ -223,7 +223,7 @@ fun locale Locale "showInfo" do
     "This locale is identified by: {locale.identifier}" print
 end
 
-def defaultLocale = Locale {| identifier: () |} // tag has default value
+let defaultLocale = Locale {| identifier: () |} // tag has default value
 
 type FrenchLocale = Locale ++ {|
     base identifier = "fr-FR"
@@ -249,4 +249,4 @@ async sub urls "gatherData" =>
   | #err e -> "There was an error in one or more fetch operations: {e}" log
 
 // async implicit await
-def entries = "phonebook.txt" readFile
+let entries = "phonebook.txt" readFile
