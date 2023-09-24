@@ -22,6 +22,11 @@ function check(tree, error)
 
         case CALL:
             checkFunction(tree.fun, error)
+            break;
+
+        case FUN_DEF:
+            if (tree.kind === "sub" && tree.returnType !== null)
+                error("Subroutines cannot have a return type")
     }
 
     return tree
@@ -115,6 +120,7 @@ const DECONSTRUCT_RECORD = "DECONSTRUCT_RECORD"
 const DECONSTRUCT_MEMBER = "DECONSTRUCT_MEMBER"
 const DECONSTRUCT_NAME = "DECONSTRUCT_NAME"
 const FUN_DEF = "FUN_DEF"
+const INLINE_SEQ = "INLINE_SEQ"
 const FUN_PARAM_DEF = "FUN_PARAM_DEF"
 const VOID_TYPE = "VOID_TYPE"
 const CODE_BLOCK = "CODE_BLOCK"
@@ -126,7 +132,7 @@ const TUPLE_TYPE = "TUPLE_TYPE"
 const TUPLE_POWER_TYPE = "TUPLE_POWER_TYPE"
 const VOIDABLE_TYPE = "VOIDABLE_TYPE"
 const LIST_TYPE = "LIST_TYPE"
-const SEQ_TYPE = "SEQ_TYPE"
+const ENUM_TYPE = "ENUM_TYPE"
 const SET_TYPE = "SET_TYPE"
 const DICT_TYPE = "DICT_TYPE"
 const REC_TYPE = "REC_TYPE"
@@ -176,6 +182,9 @@ const BOOLEAN = "BOOLEAN"
 const ASSIGN = "ASSIGN"
 const MUTABLE_PARAM = "MUTABLE_PARAM"
 const WHILE = "WHILE"
+const ITER = "ITER"
+const NEXT = "NEXT"
+const BREAK = "BREAK"
 const RANGE = "RANGE"
 const MODIFY_REC = "MODIFY_REC"
 const SPLAT = "SPLAT"
@@ -189,12 +198,14 @@ const GET_WISE_MEMBER = "GET_WITH_MEMBER"
 const CARTESIAN_PROD = "CARTESIAN_PROD"
 const CARTESIAN_POWER = "CARTESIAN_POWER"
 const PROP_DEF = "PROP_DEF"
+const RECORD_MERGE = "RECORD_MERGE"
 const INHERITANCE = "INHERITANCE"
 const SET_DIFF = "SET_DIFF"
 const SET_UNION = "SET_UNION"
 const SET_INTER = "SET_INTER"
 const SET_COMPARISON = "SET_COMPARISON"
 const SET_COMPARISON_OPERAND = "SET_COMPARISON_OPERAND"
+const SPECIALIZE_TYPE = "SPECIALIZE_TYPE"
 
 leafName = {
     MODULE: "module",
@@ -207,6 +218,7 @@ leafName = {
     DECONSTRUCT_NAME: "name for deconstruction",
     FUN_DEF: "function definition",
     FUN_PARAM_DEF: "function parameter definition",
+    INLINE_SEQ: "inline sequence",
     VOID_TYPE: "void type",
     CODE_BLOCK: "code block",
     TYPE_DEF: "type definition",
@@ -217,7 +229,7 @@ leafName = {
     TUPLE_POWER_TYPE: "tuple power type",
     VOIDABLE_TYPE: "voidable type",
     LIST_TYPE: "list type",
-    SEQ_TYPE: "sequence type",
+    ENUM_TYPE: "enumeration type",
     SET_TYPE: "set type",
     DICT_TYPE: "dictionary type",
     REC_TYPE: "record type",
@@ -267,6 +279,9 @@ leafName = {
     ASSIGN: "assignment",
     MUTABLE_PARAM: "mutable parameter",
     WHILE: "while loop",
+    ITER: "iteration loop",
+    NEXT: "next loop instruction",
+    BREAK: "break loop instruction",
     RANGE: "range",
     MODIFY_REC: "modified record",
     SPLAT: "splat operation",
@@ -280,12 +295,14 @@ leafName = {
     CARTESIAN_PROD: "cartesian product",
     CARTESIAN_POWER: "cartesian power",
     PROP_DEF: "property definition",
+    RECORD_MERGE: "record merge",
     INHERITANCE: "inheritance",
     SET_DIFF: "set difference",
     SET_UNION: "set union",
     SET_INTER: "set intersection",
     SET_COMPARISON: "set comparison",
-    SET_COMPARISON_OPERAND: "set comparison operand"
+    SET_COMPARISON_OPERAND: "set comparison operand",
+    SPECIALIZE_TYPE: "type specialization"
 }
 
 module.exports = {
@@ -302,6 +319,7 @@ module.exports = {
     DECONSTRUCT_NAME,
     FUN_DEF,
     FUN_PARAM_DEF,
+    INLINE_SEQ,
     VOID_TYPE,
     CODE_BLOCK,
     TYPE_DEF,
@@ -312,7 +330,7 @@ module.exports = {
     TUPLE_POWER_TYPE,
     VOIDABLE_TYPE,
     LIST_TYPE,
-    SEQ_TYPE,
+    ENUM_TYPE,
     SET_TYPE,
     DICT_TYPE,
     REC_TYPE,
@@ -362,6 +380,9 @@ module.exports = {
     ASSIGN,
     MUTABLE_PARAM,
     WHILE,
+    ITER,
+    NEXT,
+    BREAK,
     RANGE,
     MODIFY_REC,
     SPLAT,
@@ -375,10 +396,12 @@ module.exports = {
     CARTESIAN_PROD,
     CARTESIAN_POWER,
     PROP_DEF,
+    RECORD_MERGE,
     INHERITANCE,
     SET_DIFF,
     SET_UNION,
     SET_INTER,
     SET_COMPARISON,
-    SET_COMPARISON_OPERAND
+    SET_COMPARISON_OPERAND,
+    SPECIALIZE_TYPE
 };

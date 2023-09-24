@@ -64,9 +64,6 @@ optionalList = [1, 2, 3]
 mut optionalList ins (-12); 0
 mut optionalList del 1+..2 // range from 1, 2 elements long
 
-var sequenceOfInt seq->int = seq { yield 1 }
-var sequenceOfIntWithParam seq int->int
-
 var setOfStr set{str} = set{"a", "b", "c"}
 let onlyAB = setOfStr but "c"
 
@@ -145,7 +142,7 @@ fun list "has" element =>
     other yes
 
 var _locales dict{(str | ()) -> any} = dict{ }
-fun identifier "locale" do
+state fun identifier "locale" do
     _locales has identifier ?
         _locales[identifier]
     else
@@ -200,14 +197,14 @@ fun list [[@T]] "flat": [@T] =>
 
 var _localeCount = 0 // private static variable of module
 
-type Locale = {|
+record Locale {|
     const identifier str? // voidable and readonly because not var
-    tag any = () // freely accessible, need to copy the array to modify, with default value
+    tag any: () // freely accessible, need to copy the array to modify, with default value
 
     init _instance JS--Intl--Locale // private and readonly
     prop calendar str => _instance.calendar // readonly via accessor
 
-    var _positive int = 0 // private read/write, with default value
+    var _positive int: 0 // private read/write, with default value
     prop positive int // public read/write via accessor
         => _positive
         set => $v >= 0 ? _positive := $v
@@ -226,8 +223,9 @@ end
 
 let defaultLocale = Locale {| identifier: () |} // tag has default value
 
-type FrenchLocale = Locale ++ {|
-    base identifier = "fr-FR"
+record FrenchLocale {|
+    ...Locale,
+    base identifier: "fr-FR"
     var croissants int
     new
         croissants := 3 + 5 random
@@ -245,7 +243,7 @@ end
 fun mut locale "buyCroissant" => locale.croissants += 1 // works with any locale with croissants
 
 async sub urls "gatherData" =>
-  urls map => $u fetch defer \ wantAll // defer to not wait for result
+  urls map => $u fetch defer \ wantAll defer // defer to not wait for result
   | #ok dataList -> dataList processData
   | #err e -> "There was an error in one or more fetch operations: {e}" log
 
@@ -260,17 +258,29 @@ seq n int "getNumbersSeq": int do
     }
 end
 
-let getNumbersSeq = seq :n {
+let numbersEnum enum->int = seq: int {
     yield 1
     yield 2
     yield 3
-    yield n // included in scope of lambda
+    yield 4
 }
 
-fun lst seq->@T "tally": dict{@T -> int} do
+fun lst enum->@T "tally": dict{@T -> int} do
     var counts dict{T -> int} = dict{}
-    lst each => counts[x] = (counts[x] ?? 0) + 1 // supposing that ?? can be applied to (#some T | #none)
+    lst each :x => counts[x] = (counts[x] ?? 0) + 1 // supposing that ?? can be applied to (#ok T | #none)
     counts
+end
+
+fun lst enum->@T "each" action @T->any: #done | any do
+    iter () lst.fetch // could be implicit await, could be io
+    | #done -> break
+    | #ok @item -> {
+        item action
+        | (), #done, #ok @subItem -> next
+        | @subError -> return error
+    }
+    | @error -> return error
+    #done
 end
 
 fun keys set{@T} "associate" f @T->@U : dict{@T -> @U} do
@@ -279,18 +289,18 @@ fun keys set{@T} "associate" f @T->@U : dict{@T -> @U} do
     result
 end
 
-fun ab (seq->@T)^2 "tally": dict{@T -> int*int} do
+fun ab (enum->@T)^2 "tally": dict{@T -> int*int} do
     let (aCounts, bCounts) = ab each tally
     let allKeys = aCounts.keys {+} bCounts.keys
     allKeys associate :k => (aCounts[k] ?? 0, bCounts[k] ?? 0)
 end
 
-fun a seq->@T "listUnion" b seq->@T: [@T] do
+fun a enum->@T "listUnion" b enum->@T: [@T] do
     (a, b) tally \ flatMap :k T; v int*int
         => [k] * (v max)
 end
 
-fun a seq->@T "listDiff" b seq->@T: [@T] do
+fun a enum->@T "listDiff" b enum->@T: [@T] do
     let aCounts = a tally
     let bCounts = b tally
 
@@ -298,10 +308,63 @@ fun a seq->@T "listDiff" b seq->@T: [@T] do
         [k] * ((v - (bCounts[k] ?? 0), 0) max)
 end
 
-fun a seq->@T "listInter" b seq->@T: [@T] do
+fun a enum->@T "listInter" b enum->@T: [@T] do
     let aCounts = a tally
     let bCounts = b tally
 
     aCounts flatMap :k T; v int =>
         [k] * ((v, bCounts[k] ?? 0) min)
 end
+
+var myCounter = 0 // would be outside
+state fun () "counter": int do
+    myCounter += 1
+end
+
+// enum->@T
+// {| state fun () "fetch": T? => ? |}
+// async enum->@T
+// {| async state fun () "fetch": T? => ? |}
+
+fun n @T "getNumbersEnum": enum->@T =>
+  {|
+    var _current T: 0
+    _last T: n
+    state fun () "fetch" =>
+      me._current < me._last ? {
+        let result = _current
+        _current += 1
+        #ok result
+      } else #done
+    state fun () "close" => ()
+  |}
+
+let mySeq = 5 getNumbersSeq
+var myEnum Enum of int = () mySeq
+iter () myEnum.get
+    | #ok @i -> { "Number {i}" print. next }
+    other break
+() myEnum.close
+
+// Range from low to high excluded
+fun low @T "..<" high @T: enum->@T =>
+  {|
+    var _current T: low
+    _high T: high
+    state fun () "fetch" =>
+      me._current < me._high ? {
+        let result = _current
+        _current += 1 // type T only need to handle "+ 1" and "<"
+        #ok result
+      } else #done
+  |}
+
+record Console {|
+    sub data any "log" => ?
+|}
+
+record JSConsole {|
+    ...Console,
+    sub data any "log" => data JS--Console.log
+|}
+

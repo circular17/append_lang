@@ -4,20 +4,25 @@
 /************* MODULE STRUCTURE *************/
 
 module
-    = __ s:moduleStatements? __
-        { return tree.leaf(tree.MODULE, { statements: s ?? [] }, error) }
+    = __ s:moduleStatements __
+        { return tree.leaf(tree.MODULE, { statements: s }, error) }
 
 moduleStatements // []
     = hd:moduleStatement tl:(statementSeparator s:moduleStatement { return s })*
         { return [hd].concat(tl).flat() }
+    / "" { return [] }
 
-moduleStatement // [] or leaf
+statement
     = defs
     / vars
     / typeDefs
-    / explicitBlock
+    / recordDef
     / fun
     / branch
+
+moduleStatement // [] or leaf
+    = statement
+    / explicitModuleBlock
 
 statementSeparator
     = _ d:"." " " _ { return d }
@@ -62,12 +67,24 @@ typeDefs // []
         { return [hd].concat(tl) }
 
 typeDef
-    = _ name:id _ "=" _ type:type
-        { return tree.leaf(tree.TYPE_DEF, { name, type }, error) }
+    = _ name:id genericParams:genericParams _ "=" _ type:type
+        { return tree.leaf(tree.TYPE_DEF, {
+            name,
+            genericParams: genericParams,
+            type
+        }, error) }
 
-explicitBlock
-    = "do" __ s:moduleStatements? __ when:when? __ "end"
-        { return tree.leaf(tree.CODE_BLOCK, { statements: s ?? [], when }, error) }
+genericParams
+    = _ "of" __ "@" hd:id tl:(_ "/" __ "@" i:id { return i })*
+        { return [hd].concat(tl) }
+    / "" { return [] }
+
+recordDef
+    = "record" _ n:namedRecType { return n }
+
+explicitModuleBlock
+    = "do" __ s:moduleStatements __ when:when? __ "end"
+        { return tree.leaf(tree.CODE_BLOCK, { statements: s, when }, error) }
 
 when
     = "when" (eol _ "|"? _ / __) c:caseBody { return c }
@@ -75,15 +92,32 @@ when
 /************* FUNCTION DEFINITION *************/
 
 fun
-    = global:("global" _)? async:("async" _)? kind:funKind _ hd:funParam __ "\"" name:(id / overridableOp) "\"" _
-    tl:(__ p:params { return p })? _ returnType:(colon __ t:type { return t })? _ body:funBody
-        { return tree.leaf(tree.FUN_DEF, {
-            kind, async: !!async, global: !!global,
+    = isGlobal:isGlobal isAsync:isAsync purity:purity
+    kind:funKind _ hd:funParam __ "\"" keywordName:$(keyword?) name:(id / overridableOp)? "\"" _
+    tl:(__ p:params { return p })? _ returnType:(colon __ t:type { return t })? _ body:funBody {
+        if (keywordName)
+            error(`The keyword '${keywordName}' cannot be used as an identifier`)
+        if (!name)
+            error("The name of the function is not specified")
+        return tree.leaf(tree.FUN_DEF, {
+            isGlobal,
+            isAsync,
+            purity,
+            kind,
             name,
             params: [hd].concat(tl ?? []),
             body,
             returnType
-        }, error) }
+        }, error)
+    }
+
+isGlobal
+    = "global" _ { return true }
+    / "" { return false }
+
+isAsync
+    = "async" _ { return true }
+    / "" { return false }
 
 funParam
     = mut:("mut" _)? names:identifiers _ type:type?
@@ -101,21 +135,28 @@ params // []
 funKind
     = "fun" / "sub" / "seq"
 
+purity
+    = p:"state" _ { return p }
+    / "" { return "pure" }
+
 funBody
     = __ "=>" __ v:branch { return v }
+    / __ "=>" _ "?" { return null }
     / __ explicitFunBlock
     / case
 
 explicitFunBlock
-    = "do" __ s:statements? __ when:when? __ "end"
-        { return tree.leaf(tree.CODE_BLOCK, { statements: s ?? [], when }, error) }
+    = "do" __ s:funStatements __ when:when? __ "end"
+        { return tree.leaf(tree.CODE_BLOCK, { statements: s, when }, error) }
 
-statements // []
-    = hd:statement tl:(statementSeparator s:statement { return s })*
+funStatements // []
+    = hd:funStatement tl:(statementSeparator s:funStatement { return s })*
         { return [hd].concat(tl).flat() }
+    / "" { return [] }
 
-statement // [] or leaf
-    = moduleStatement
+funStatement // [] or leaf
+    = statement
+    / explicitFunBlock
     / return
 
 return
@@ -124,6 +165,8 @@ return
     / "yield" _ value:branch
             { return tree.leaf(tree.YIELD, { value }, error) }
     / "resume" { return tree.leaf(tree.RESUME, { }, error) }
+    / "next" { return tree.leaf(tree.NEXT, { }, error) }
+    / "break" { return tree.leaf(tree.BREAK, { }, error) }
 
 /************* BRANCHING *************/
 
@@ -134,6 +177,8 @@ branch
 loop
     = "while" _ condition:valueExpr __ body:(branch / inlineBlock / return)
         { return tree.leaf(tree.WHILE, { condition, body }, error) }
+    / "iter" body:(branch / inlineBlock / return)
+        { return tree.leaf(tree.ITER, { body }, error) }
 
 optionWithPipe
     = value:pipedExpr option:(ternary / case / wiseBlock)? {
@@ -156,7 +201,7 @@ optionNoPipe
     }
 
 wiseBlock
-    = _ "wise" __ "{" __ statements:statements __ close:"}"? {
+    = _ "wise" __ "{" __ statements:funStatements __ close:"}"? {
         if (!close)
             error("Expecting \")\" to close the 'wise' block")
         return tree.leaf(tree.WISE_BLOCK, {
@@ -171,7 +216,7 @@ case
     = _ ("case" __ "|"? _ / eol _ "|" _) c:caseBody { return c }
 
 inlineBlock
-    = "{" !(([-+&*^] / [><] "="? / "!=") "}") __ statements:statements? __ "}"
+    = "{" !(([-+&*^] / [><] "="? / "!=") "}") __ statements:funStatements __ "}"
         { return tree.leaf(tree.CODE_BLOCK, { statements }, error) }
 
 /************* PATTERN MATCHING *************/
@@ -317,15 +362,19 @@ taggedType
     / functionType
 
 functionType
-    = hd:inheritance tl:(_ "->" __ t:inheritance { return t })* {
+    = isAsync:isAsync purity:purity hd:recordMerge tl:(_ "->" __ t:recordMerge { return t })* {
         return tl.length > 0
-            ? tree.leaf(tree.FUN_TYPE, { params: [hd].concat(tl) }, error)
+            ? tree.leaf(tree.FUN_TYPE, {
+                isAsync,
+                purity,
+                params: [hd].concat(tl)
+            }, error)
             : hd }
 
-inheritance
+recordMerge
     = hd:tupleType tl:(_ "++" __ tupleType)* {
         return tl.length > 0
-            ? tree.leaf(tree.INHERITANCE, { records: [hd].concat(tl) }, error)
+            ? tree.leaf(tree.RECORD_MERGE, { records: [hd].concat(tl) }, error)
             : hd
     }
 
@@ -350,48 +399,84 @@ nonVoidableType
     / genericParamType
     / listType
     / linkedListType
-    / seqType
+    / enumType
     / setType
     / dictType
-    / recType
+    / anonymousRecType
     / voidType
     / "(" __ t:type __ ")" { return t }
 
 listType = "[" __ elementType:type __ "]" { return tree.leaf(tree.LIST_TYPE, { type: elementType }, error) }
 linkedListType = "::" _ elementType:type { return tree.leaf(tree.LINKED_LIST_TYPE, { type: elementType }, error) }
 
-seqType
-    = "seq" _ hd:inheritance tl:(_ "->" __ t:inheritance { return t })* {
-        return tl.length > 0
-            ? tree.leaf(tree.SEQ_TYPE, { params: [hd].concat(tl) }, error)
-            : hd }
-    / "seq" _ "->" __ returnType:inheritance
-        { return tree.leaf(tree.SEQ_TYPE, { params: [returnType] }, error) }
+enumType
+    = isAsync:isAsync "enum" elementType:(_ "->" __ t:recordMerge { return t })?
+        { return tree.leaf(tree.ENUM_TYPE, {
+            isAsync,
+            elementType: elementType ?? "any"
+        }, error) }
 
 setType = "set" _ "{" __ elementType:type __ "}" { return tree.leaf(tree.SET_TYPE, { type: elementType }, error) }
 
 dictType
     = "dict" _ "{" __ key:tupleType _ "->" __ value:tupleType __ "}"
         { return tree.leaf(tree.DICT_TYPE, { key, value }, error) }
-recType
-    = "{|" __ hd:recMemberType tl:((_ "," / eol) __ m:recMemberType { return m })* __ "|}"
-        { return tree.leaf(tree.REC_TYPE, { members: [hd].concat(tl) }, error) }
-recMemberType
-    = regularMemberType
+
+namedRecType
+    = name:id genericParams:genericParams _ "{|" __
+    hd:namedRecMemberType tl:((_ "," / eol) __ m:namedRecMemberType { return m })* __ "|}"
+        { return tree.leaf(tree.REC_TYPE, {
+            name,
+            genericParams,
+            members: [hd].concat(tl)
+        }, error) }
+namedRecMemberType
+    = namedRecInheritance
+    / namedRecFieldType
     / propDef
+    / fun
     / constructor
 
-regularMemberType
-    = modifier:recMemberTypeModifier? _ names:identifiers _ type:type?
-    defaultValue:(_ "=" __ value:valueExpr { return value })?
-        { return tree.leaf(tree.REC_MEMBER_TYPE, { modifier, names, type, defaultValue }, error) }
-recMemberTypeModifier
+namedRecInheritance
+    = "..." parent:namedType { return tree.leaf(tree.INHERITANCE, { parent }, error) }
+
+namedRecFieldType
+    = modifier:namedRecFieldTypeModifier? _ names:identifiers _ type:type?
+    defaultValue:(_ ":" __ value:valueExpr { return value })? {
+        if (!type && !defaultValue)
+            error("The type or the value of the member must be specified")
+        return tree.leaf(tree.REC_MEMBER_TYPE, { modifier, names, type, defaultValue }, error)
+    }
+namedRecFieldTypeModifier
     = "const" / "base" / "init" / "var"
 
+anonymousRecType
+    = "{|" __ hd:anonymousRecMemberType tl:((_ "," / eol) __ m:anonymousRecMemberType { return m })* __ "|}"
+        { return tree.leaf(tree.REC_TYPE, {
+            name: null,
+            genericParams: [],
+            members: [hd].concat(tl)
+        }, error) }
+anonymousRecMemberType
+    = anonymousRecFieldType
+    / propDef
+    / fun
+
+anonymousRecFieldType
+    = modifier:anonymousRecFieldTypeModifier? _ names:identifiers _ type:type?
+    defaultValue:(_ ":" __ value:valueExpr { return value })? {
+        if (!type && !defaultValue)
+            error("The type or the value of the member must be specified")
+        return tree.leaf(tree.REC_MEMBER_TYPE, { modifier, names, type, defaultValue }, error)
+    }
+anonymousRecFieldTypeModifier
+    = "const" / "var"
+
 propDef
-    = "prop" _ name:id _ type:type? __ getter:getterBody setter:setter?
+    = "prop" _ name:id _ type:type? __ purity:"state"? getter:getterBody setter:setter?
         { return tree.leaf(tree.PROP_DEF, {
             name,
+            purity: purity ?? "pure",
             type,
             getter,
             setter
@@ -400,57 +485,71 @@ setter
     = __ "set" _ body:lambda { return body }
 getterBody
     = "=>" __ v:branch { return v }
-    / "{" __ s:statements? __ "}"
-        { return tree.leaf(tree.CODE_BLOCK, { statements: s ?? [] }, error) }
+    / "{" __ s:funStatements __ "}"
+        { return tree.leaf(tree.CODE_BLOCK, { statements: s }, error) }
 
 lambda
-    = async:("async" _)? kind:(m:("seq" / "sub") _ { return m })? "=>" __ value:optionNoPipe
+    = isAsync:isAsync purity:purity kind:(m:"sub" _ { return m })? "=>" __ value:optionNoPipe
         { return tree.leaf(tree.FUN_DEF, {
-            kind: kind ?? "fun", async: !!async,
+            isAsync,
+            purity,
+            kind: kind ?? "fun",
             name: null,
             params: tree.getLambdaVariables(value),
             body: value,
             returnType: null
         }, error) }
-    / async:("async" _)? kind:(m:("seq" / "sub") _ { return m })? colon _ params:params __ returnType:(colon _ t:type { return t })? __ body:lambdaBody
+    / isAsync:isAsync purity:purity kind:("sub" / colon) _ params:params __ returnType:(colon _ t:type __ { return t })? body:lambdaBody
         { return tree.leaf(tree.FUN_DEF, {
-             kind: kind ?? "fun", async: !!async,
+             isAsync,
+             purity,
+             kind: kind === ":" ? "fun" : kind,
              name: null,
              params: params,
              body: body,
              returnType: returnType
          }, error) }
-     / async:("async" _)? "seq" __ body:lambdaBody
-        { return tree.leaf(tree.FUN_DEF, {
-            kind: "seq", async: !!async,
-            name: null,
-            params: [],
+     / isAsync:isAsync purity:purity "seq" __ returnType:(colon _ t:type __ { return t })? body:lambdaBody
+        { return tree.leaf(tree.INLINE_SEQ, {
+            isAsync,
+            purity,
+            kind: "seq",
             body: body,
-            returnType: null
+            returnType: returnType ?? "any"
         }, error) }
 
 lambdaBody
     = "=>" __ v:optionNoPipe { return v }
-    / "{" __ s:statements? __ "}"
-        { return tree.leaf(tree.CODE_BLOCK, { statements: s ?? [] }, error) }
+    / "{" __ s:funStatements __ "}"
+        { return tree.leaf(tree.CODE_BLOCK, { statements: s }, error) }
     / case
 
 constructor
-    = async:("async" _)? "new" returnType:(_ "|" _ t:type { return t })? body:constructorBody
+    = isAsync:isAsync "new" returnType:(_ "|" _ t:type { return t })? body:constructorBody
         { return tree.leaf(tree.FUN_DEF, {
-            kind: "sub", name: "new",
-            async: !!async,
+            isAsync,
+            kind: "fun",
+            name: "new",
             params: [],
             body,
             returnType
         }, error) }
 constructorBody
-    = __ s:statements? __ when:when? __ "end"
-        { return tree.leaf(tree.CODE_BLOCK, { statements: s ?? [], when }, error) }
+    = __ s:funStatements __ when:when? __ "end"
+        { return tree.leaf(tree.CODE_BLOCK, { statements: s, when }, error) }
 
 voidType = void { return tree.leaf(tree.VOID_TYPE, {}, error) }
 
-namedType = valueByName
+namedType = base:valueByName params:genericOrSpecializeParams? {
+        if (params)
+            return tree.leaf(tree.SPECIALIZE_TYPE, { base, params }, error)
+        else
+            return base
+    }
+genericOrSpecializeParams
+    = _ "of" __ hd:(genericParamType / valueByName) tl:(_ "/" __ t:(genericParamType / valueByName) { return t })*
+        { return [hd].concat(tl) }
+
 genericParamType = "@" id:id { return tree.leaf(tree.GENERIC_PARAM_TYPE, { name: id }, error) }
 anyType = "any" { return tree.leaf(tree.ANY_TYPE, {}, error) }
 
@@ -720,7 +819,7 @@ atom
     / dictValue
     / float
     / string
-    / getMember
+    / specializedType
     / lambda
     / voidValue
     / boolean
@@ -752,17 +851,21 @@ tuple
         }
 
 recValue
-    = "{|" _ members:recMembers? _ close:"|}"? {
+    = "{|" __ members:recMembers? __ close:"|}"? {
         if (!close) error("Expecting \"|\x7d\" to close the record")
         return tree.leaf(tree.REC_VALUE, { members: members ?? [] }, error)
     }
 recMembers
-    = __ hd:recMemberValue tl:(_ "," __ m:recMemberValue { return m })* __
+    = hd:recMemberValue tl:(_ ("," / eol) __ m:recMemberValue { return m })*
 recMemberValue
-    = modifier:(m:recMemberValueModifier _)? name:id _ colon __ value:branch
-        { return tree.leaf(tree.REC_MEMBER_VALUE, { modifier, name, value }, error) }
+    = recMemberFieldValue
+    / propDef
+    / fun
     / splat
-recMemberValueModifier
+recMemberFieldValue
+    = modifier:(m:recMemberFieldValueModifier _)? name:id _ type:type? _ colon __ value:branch
+        { return tree.leaf(tree.REC_MEMBER_VALUE, { modifier, name, type, value }, error) }
+recMemberFieldValueModifier
     = "const" / "var"
 
 splat
@@ -798,9 +901,21 @@ dictKeyValue
         { return tree.leaf(tree.DICT_KEY_VALUE, { key, value }, error) }
     / splat
 
+specializedType
+    = member:getMember params:specializeParams? {
+        if (params)
+            return tree.leaf(tree.SPECIALIZE_TYPE, { base: member, params }, error)
+        else
+            return member
+    }
+
+specializeParams
+    = _ "of" __ hd:valueByName tl:(_ "/" __ i:valueByName { return i })*
+        { return [hd].concat(tl) }
+
 getMember
-    = container:(valueByName / implicitParam)
-    path:("." id:(id / "new") { return id })* {
+    = container:(valueByName / implicitParam / "me")
+    path:("." id:id { return id })* {
         if (path.length > 0)
             return tree.leaf(tree.GET_MEMBER, { container, path }, error)
         else
@@ -816,6 +931,7 @@ valueByName
         const name = ids.pop()
         return tree.leaf(tree.VALUE_BY_NAME, { name, namespace: ids }, error)
     }
+    / "me"
 
 boolean
     = value:("yes" / "no")
@@ -860,10 +976,10 @@ comment
     / "/*" (!"*/" .)* "*/"
 eol = ([ \t] / comment)* "\r"? "\n" __
 
-keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return" / "yield"
-    / "new" / "const" / "init" / "base" / "prop"
-    / "type" / "any" / "seq" / "set" / "dict" / "yes" / "no"
-    / "wise" / "else" / "while" / "case" / "other" / "when" / "resume"
+keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return" / "yield" / "state"
+    / "new" / "const" / "init" / "base" / "prop" / "me" / "with"
+    / "type" / "of" / "any" / "seq" / "enum" / "set" / "dict" / "yes" / "no" / "record"
+    / "wise" / "else" / "while" / "iter" / "next" / "break" / "case" / "other" / "when" / "resume"
     / "in" / "or" / "xor" / "global" / "async" / "defer") ![A-Za-z0-9_]
 
 assignmentOp = ":=" / "*=" / "/=" / "%=" / "+=" / "-=" / "++="
@@ -880,6 +996,7 @@ composeOp = $(">>" !"=")
 setComparisonOp = "{=}" / "{!=}" / "{<}" / "{<=}" / "{>}" / "{>=}"
 setOp = "{-}" / "{+}" / "{&}" / "{*}" / "{^}"
 tildeOp = "~" // unused
+rangeOp = "..<" / "..="
 overridableOp
     = logicOp
     / comparisonOp
@@ -891,6 +1008,7 @@ overridableOp
     / composeOp
     / setComparisonOp
     / setOp
+    / rangeOp
 
 string = "\"" parts:(literalPart / formattedValue)*  "\""
     { return tree.leaf(tree.STRING_VALUE, { parts }, error) }

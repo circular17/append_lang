@@ -23,7 +23,7 @@ ReturnLeaf
     }
 
 ReturnMember
-    = "=> " _ member:(HeadTail / Identifier / StringLiteral) {
+    = "=>" _ member:(HeadTail / Identifier / StringLiteral / "[]") {
         return `{ return ${member} }`
     }
 

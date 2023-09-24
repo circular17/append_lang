@@ -4,20 +4,25 @@
 /************* MODULE STRUCTURE *************/
 
 module
-    = __ s:moduleStatements? __
-        => #MODULE { statements: s ?? [] }
+    = __ s:moduleStatements __
+        => #MODULE { statements: s }
 
 moduleStatements // []
     = hd:moduleStatement tl:(statementSeparator s:moduleStatement => s)*
         { return hd::tl.flat() }
+    / "" => []
 
-moduleStatement // [] or leaf
+statement
     = defs
     / vars
     / typeDefs
-    / explicitBlock
+    / recordDef
     / fun
     / branch
+
+moduleStatement // [] or leaf
+    = statement
+    / explicitModuleBlock
 
 statementSeparator
     = _ d:"." " " _ => d
@@ -62,12 +67,24 @@ typeDefs // []
         => hd::tl
 
 typeDef
-    = _ name:id _ "=" _ type:type
-        => #TYPE_DEF { name, type }
+    = _ name:id genericParams:genericParams _ "=" _ type:type
+        => #TYPE_DEF {
+            name,
+            genericParams: genericParams,
+            type
+        }
 
-explicitBlock
-    = "do" __ s:moduleStatements? __ when:when? __ "end"
-        => #CODE_BLOCK { statements: s ?? [], when }
+genericParams
+    = _ "of" __ "@" hd:id tl:(_ "/" __ "@" i:id => i)*
+        => hd::tl
+    / "" => []
+
+recordDef
+    = "record" _ n:namedRecType => n
+
+explicitModuleBlock
+    = "do" __ s:moduleStatements __ when:when? __ "end"
+        => #CODE_BLOCK { statements: s, when }
 
 when
     = "when" (eol _ "|"? _ / __) c:caseBody => c
@@ -75,15 +92,32 @@ when
 /************* FUNCTION DEFINITION *************/
 
 fun
-    = global:("global" _)? async:("async" _)? kind:funKind _ hd:funParam __ "\"" name:(id / overridableOp) "\"" _
-    tl:(__ p:params => p)? _ returnType:(colon __ t:type => t)? _ body:funBody
-        => #FUN_DEF {
-            kind, async: !!async, global: !!global,
+    = isGlobal:isGlobal isAsync:isAsync purity:purity
+    kind:funKind _ hd:funParam __ "\"" keywordName:$(keyword?) name:(id / overridableOp)? "\"" _
+    tl:(__ p:params => p)? _ returnType:(colon __ t:type => t)? _ body:funBody {
+        if (keywordName)
+            error(`The keyword '${keywordName}' cannot be used as an identifier`)
+        if (!name)
+            error("The name of the function is not specified")
+        return #FUN_DEF {
+            isGlobal,
+            isAsync,
+            purity,
+            kind,
             name,
             params: [hd].concat(tl ?? []),
             body,
             returnType
         }
+    }
+
+isGlobal
+    = "global" _ => true
+    / "" => false
+
+isAsync
+    = "async" _ => true
+    / "" => false
 
 funParam
     = mut:("mut" _)? names:identifiers _ type:type?
@@ -101,21 +135,28 @@ params // []
 funKind
     = "fun" / "sub" / "seq"
 
+purity
+    = p:"state" _ => p
+    / "" => "pure"
+
 funBody
     = __ "=>" __ v:branch => v
+    / __ "=>" _ "?" => null
     / __ explicitFunBlock
     / case
 
 explicitFunBlock
-    = "do" __ s:statements? __ when:when? __ "end"
-        => #CODE_BLOCK { statements: s ?? [], when }
+    = "do" __ s:funStatements __ when:when? __ "end"
+        => #CODE_BLOCK { statements: s, when }
 
-statements // []
-    = hd:statement tl:(statementSeparator s:statement => s)*
+funStatements // []
+    = hd:funStatement tl:(statementSeparator s:funStatement => s)*
         { return hd::tl.flat() }
+    / "" => []
 
-statement // [] or leaf
-    = moduleStatement
+funStatement // [] or leaf
+    = statement
+    / explicitFunBlock
     / return
 
 return
@@ -124,6 +165,8 @@ return
     / "yield" _ value:branch
             => #YIELD { value }
     / "resume" => #RESUME { }
+    / "next" => #NEXT { }
+    / "break" => #BREAK { }
 
 /************* BRANCHING *************/
 
@@ -134,6 +177,8 @@ branch
 loop
     = "while" _ condition:valueExpr __ body:(branch / inlineBlock / return)
         => #WHILE { condition, body }
+    / "iter" body:(branch / inlineBlock / return)
+        => #ITER { body }
 
 optionWithPipe
     = value:pipedExpr option:(ternary / case / wiseBlock)? {
@@ -156,7 +201,7 @@ optionNoPipe
     }
 
 wiseBlock
-    = _ "wise" __ "{" __ statements:statements __ close:"}"? {
+    = _ "wise" __ "{" __ statements:funStatements __ close:"}"? {
         if (!close)
             error("Expecting \")\" to close the 'wise' block")
         return #WISE_BLOCK {
@@ -171,7 +216,7 @@ case
     = _ ("case" __ "|"? _ / eol _ "|" _) c:caseBody => c
 
 inlineBlock
-    = "{" !(([-+&*^] / [><] "="? / "!=") "}") __ statements:statements? __ "}"
+    = "{" !(([-+&*^] / [><] "="? / "!=") "}") __ statements:funStatements __ "}"
         => #CODE_BLOCK { statements }
 
 /************* PATTERN MATCHING *************/
@@ -317,15 +362,19 @@ taggedType
     / functionType
 
 functionType
-    = hd:inheritance tl:(_ "->" __ t:inheritance => t)* {
+    = isAsync:isAsync purity:purity hd:recordMerge tl:(_ "->" __ t:recordMerge => t)* {
         return tl.length > 0
-            ? #FUN_TYPE { params: hd::tl }
+            ? #FUN_TYPE {
+                isAsync,
+                purity,
+                params: hd::tl
+            }
             : hd }
 
-inheritance
+recordMerge
     = hd:tupleType tl:(_ "++" __ tupleType)* {
         return tl.length > 0
-            ? #INHERITANCE { records: hd::tl }
+            ? #RECORD_MERGE { records: hd::tl }
             : hd
     }
 
@@ -350,48 +399,84 @@ nonVoidableType
     / genericParamType
     / listType
     / linkedListType
-    / seqType
+    / enumType
     / setType
     / dictType
-    / recType
+    / anonymousRecType
     / voidType
     / "(" __ t:type __ ")" => t
 
 listType = "[" __ elementType:type __ "]" => #LIST_TYPE { type: elementType }
 linkedListType = "::" _ elementType:type => #LINKED_LIST_TYPE { type: elementType }
 
-seqType
-    = "seq" _ hd:inheritance tl:(_ "->" __ t:inheritance => t)* {
-        return tl.length > 0
-            ? #SEQ_TYPE { params: hd::tl }
-            : hd }
-    / "seq" _ "->" __ returnType:inheritance
-        => #SEQ_TYPE { params: [returnType] }
+enumType
+    = isAsync:isAsync "enum" elementType:(_ "->" __ t:recordMerge => t)?
+        => #ENUM_TYPE {
+            isAsync,
+            elementType: elementType ?? "any"
+        }
 
 setType = "set" _ "{" __ elementType:type __ "}" => #SET_TYPE { type: elementType }
 
 dictType
     = "dict" _ "{" __ key:tupleType _ "->" __ value:tupleType __ "}"
         => #DICT_TYPE { key, value }
-recType
-    = "{|" __ hd:recMemberType tl:((_ "," / eol) __ m:recMemberType => m)* __ "|}"
-        => #REC_TYPE { members: hd::tl }
-recMemberType
-    = regularMemberType
+
+namedRecType
+    = name:id genericParams:genericParams _ "{|" __
+    hd:namedRecMemberType tl:((_ "," / eol) __ m:namedRecMemberType => m)* __ "|}"
+        => #REC_TYPE {
+            name,
+            genericParams,
+            members: hd::tl
+        }
+namedRecMemberType
+    = namedRecInheritance
+    / namedRecFieldType
     / propDef
+    / fun
     / constructor
 
-regularMemberType
-    = modifier:recMemberTypeModifier? _ names:identifiers _ type:type?
-    defaultValue:(_ "=" __ value:valueExpr => value)?
-        => #REC_MEMBER_TYPE { modifier, names, type, defaultValue }
-recMemberTypeModifier
+namedRecInheritance
+    = "..." parent:namedType => #INHERITANCE { parent }
+
+namedRecFieldType
+    = modifier:namedRecFieldTypeModifier? _ names:identifiers _ type:type?
+    defaultValue:(_ ":" __ value:valueExpr => value)? {
+        if (!type && !defaultValue)
+            error("The type or the value of the member must be specified")
+        return #REC_MEMBER_TYPE { modifier, names, type, defaultValue }
+    }
+namedRecFieldTypeModifier
     = "const" / "base" / "init" / "var"
 
+anonymousRecType
+    = "{|" __ hd:anonymousRecMemberType tl:((_ "," / eol) __ m:anonymousRecMemberType => m)* __ "|}"
+        => #REC_TYPE {
+            name: null,
+            genericParams: [],
+            members: hd::tl
+        }
+anonymousRecMemberType
+    = anonymousRecFieldType
+    / propDef
+    / fun
+
+anonymousRecFieldType
+    = modifier:anonymousRecFieldTypeModifier? _ names:identifiers _ type:type?
+    defaultValue:(_ ":" __ value:valueExpr => value)? {
+        if (!type && !defaultValue)
+            error("The type or the value of the member must be specified")
+        return #REC_MEMBER_TYPE { modifier, names, type, defaultValue }
+    }
+anonymousRecFieldTypeModifier
+    = "const" / "var"
+
 propDef
-    = "prop" _ name:id _ type:type? __ getter:getterBody setter:setter?
+    = "prop" _ name:id _ type:type? __ purity:"state"? getter:getterBody setter:setter?
         => #PROP_DEF {
             name,
+            purity: purity ?? "pure",
             type,
             getter,
             setter
@@ -400,57 +485,71 @@ setter
     = __ "set" _ body:lambda => body
 getterBody
     = "=>" __ v:branch => v
-    / "{" __ s:statements? __ "}"
-        => #CODE_BLOCK { statements: s ?? [] }
+    / "{" __ s:funStatements __ "}"
+        => #CODE_BLOCK { statements: s }
 
 lambda
-    = async:("async" _)? kind:(m:("seq" / "sub") _ => m)? "=>" __ value:optionNoPipe
+    = isAsync:isAsync purity:purity kind:(m:"sub" _ => m)? "=>" __ value:optionNoPipe
         => #FUN_DEF {
-            kind: kind ?? "fun", async: !!async,
+            isAsync,
+            purity,
+            kind: kind ?? "fun",
             name: null,
             params: tree.getLambdaVariables(value),
             body: value,
             returnType: null
         }
-    / async:("async" _)? kind:(m:("seq" / "sub") _ => m)? colon _ params:params __ returnType:(colon _ t:type => t)? __ body:lambdaBody
+    / isAsync:isAsync purity:purity kind:("sub" / colon) _ params:params __ returnType:(colon _ t:type __ => t)? body:lambdaBody
         => #FUN_DEF {
-             kind: kind ?? "fun", async: !!async,
+             isAsync,
+             purity,
+             kind: kind === ":" ? "fun" : kind,
              name: null,
              params: params,
              body: body,
              returnType: returnType
          }
-     / async:("async" _)? "seq" __ body:lambdaBody
-        => #FUN_DEF {
-            kind: "seq", async: !!async,
-            name: null,
-            params: [],
+     / isAsync:isAsync purity:purity "seq" __ returnType:(colon _ t:type __ => t)? body:lambdaBody
+        => #INLINE_SEQ {
+            isAsync,
+            purity,
+            kind: "seq",
             body: body,
-            returnType: null
+            returnType: returnType ?? "any"
         }
 
 lambdaBody
     = "=>" __ v:optionNoPipe => v
-    / "{" __ s:statements? __ "}"
-        => #CODE_BLOCK { statements: s ?? [] }
+    / "{" __ s:funStatements __ "}"
+        => #CODE_BLOCK { statements: s }
     / case
 
 constructor
-    = async:("async" _)? "new" returnType:(_ "|" _ t:type => t)? body:constructorBody
+    = isAsync:isAsync "new" returnType:(_ "|" _ t:type => t)? body:constructorBody
         => #FUN_DEF {
-            kind: "sub", name: "new",
-            async: !!async,
+            isAsync,
+            kind: "fun",
+            name: "new",
             params: [],
             body,
             returnType
         }
 constructorBody
-    = __ s:statements? __ when:when? __ "end"
-        => #CODE_BLOCK { statements: s ?? [], when }
+    = __ s:funStatements __ when:when? __ "end"
+        => #CODE_BLOCK { statements: s, when }
 
 voidType = void => #VOID_TYPE {}
 
-namedType = valueByName
+namedType = base:valueByName params:genericOrSpecializeParams? {
+        if (params)
+            return #SPECIALIZE_TYPE { base, params }
+        else
+            return base
+    }
+genericOrSpecializeParams
+    = _ "of" __ hd:(genericParamType / valueByName) tl:(_ "/" __ t:(genericParamType / valueByName) => t)*
+        => hd::tl
+
 genericParamType = "@" id:id => #GENERIC_PARAM_TYPE { name: id }
 anyType = "any" => #ANY_TYPE {}
 
@@ -720,7 +819,7 @@ atom
     / dictValue
     / float
     / string
-    / getMember
+    / specializedType
     / lambda
     / voidValue
     / boolean
@@ -752,17 +851,21 @@ tuple
         }
 
 recValue
-    = "{|" _ members:recMembers? _ close:"|}"? {
+    = "{|" __ members:recMembers? __ close:"|}"? {
         if (!close) error("Expecting \"|\x7d\" to close the record")
         return #REC_VALUE { members: members ?? [] }
     }
 recMembers
-    = __ hd:recMemberValue tl:(_ "," __ m:recMemberValue => m)* __
+    = hd:recMemberValue tl:(_ ("," / eol) __ m:recMemberValue => m)*
 recMemberValue
-    = modifier:(m:recMemberValueModifier _)? name:id _ colon __ value:branch
-        => #REC_MEMBER_VALUE { modifier, name, value }
+    = recMemberFieldValue
+    / propDef
+    / fun
     / splat
-recMemberValueModifier
+recMemberFieldValue
+    = modifier:(m:recMemberFieldValueModifier _)? name:id _ type:type? _ colon __ value:branch
+        => #REC_MEMBER_VALUE { modifier, name, type, value }
+recMemberFieldValueModifier
     = "const" / "var"
 
 splat
@@ -798,9 +901,21 @@ dictKeyValue
         => #DICT_KEY_VALUE { key, value }
     / splat
 
+specializedType
+    = member:getMember params:specializeParams? {
+        if (params)
+            return #SPECIALIZE_TYPE { base: member, params }
+        else
+            return member
+    }
+
+specializeParams
+    = _ "of" __ hd:valueByName tl:(_ "/" __ i:valueByName => i)*
+        => hd::tl
+
 getMember
-    = container:(valueByName / implicitParam)
-    path:("." id:(id / "new") => id)* {
+    = container:(valueByName / implicitParam / "me")
+    path:("." id:id => id)* {
         if (path.length > 0)
             return #GET_MEMBER { container, path }
         else
@@ -816,6 +931,7 @@ valueByName
         const name = ids.pop()
         return #VALUE_BY_NAME { name, namespace: ids }
     }
+    / "me"
 
 boolean
     = value:("yes" / "no")
@@ -860,10 +976,10 @@ comment
     / "/*" (!"*/" .)* "*/"
 eol = ([ \t] / comment)* "\r"? "\n" __
 
-keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return" / "yield"
-    / "new" / "const" / "init" / "base" / "prop"
-    / "type" / "any" / "seq" / "set" / "dict" / "yes" / "no"
-    / "wise" / "else" / "while" / "case" / "other" / "when" / "resume"
+keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return" / "yield" / "state"
+    / "new" / "const" / "init" / "base" / "prop" / "me" / "with"
+    / "type" / "of" / "any" / "seq" / "enum" / "set" / "dict" / "yes" / "no" / "record"
+    / "wise" / "else" / "while" / "iter" / "next" / "break" / "case" / "other" / "when" / "resume"
     / "in" / "or" / "xor" / "global" / "async" / "defer") ![A-Za-z0-9_]
 
 assignmentOp = ":=" / "*=" / "/=" / "%=" / "+=" / "-=" / "++="
@@ -880,6 +996,7 @@ composeOp = $(">>" !"=")
 setComparisonOp = "{=}" / "{!=}" / "{<}" / "{<=}" / "{>}" / "{>=}"
 setOp = "{-}" / "{+}" / "{&}" / "{*}" / "{^}"
 tildeOp = "~" // unused
+rangeOp = "..<" / "..="
 overridableOp
     = logicOp
     / comparisonOp
@@ -891,6 +1008,7 @@ overridableOp
     / composeOp
     / setComparisonOp
     / setOp
+    / rangeOp
 
 string = "\"" parts:(literalPart / formattedValue)*  "\""
     => #STRING_VALUE { parts }
