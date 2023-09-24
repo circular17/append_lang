@@ -250,7 +250,7 @@ async sub urls "gatherData" =>
 // async implicit await
 let entries = "phonebook.txt" readFile
 
-seq n int "getNumbersSeq": int do
+enum n int "getNumbersSeq": int do
     var i int = 0
     while i < n {
         yield i
@@ -258,7 +258,7 @@ seq n int "getNumbersSeq": int do
     }
 end
 
-let numbersEnum enum->int = seq: int {
+let numbersEnum enum->int = enum: int {
     yield 1
     yield 2
     yield 3
@@ -339,8 +339,7 @@ fun n @T "getNumbersEnum": enum->@T =>
     state fun () "close" => ()
   |}
 
-let mySeq = 5 getNumbersSeq
-var myEnum Enum of int = () mySeq
+var myEnum enum->int = 5 getNumbersEnum
 iter () myEnum.get
     | #ok @i -> { "Number {i}" print. next }
     other break
@@ -357,6 +356,8 @@ fun low @T "..<" high @T: enum->@T =>
         _current += 1 // type T only need to handle "+ 1" and "<"
         #ok result
       } else #done
+    state fun value "has" =>
+      value >= low & value < high
   |}
 
 record Console {|

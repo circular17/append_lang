@@ -120,7 +120,7 @@ const DECONSTRUCT_RECORD = "DECONSTRUCT_RECORD"
 const DECONSTRUCT_MEMBER = "DECONSTRUCT_MEMBER"
 const DECONSTRUCT_NAME = "DECONSTRUCT_NAME"
 const FUN_DEF = "FUN_DEF"
-const INLINE_SEQ = "INLINE_SEQ"
+const INLINE_ENUM = "INLINE_ENUM"
 const FUN_PARAM_DEF = "FUN_PARAM_DEF"
 const VOID_TYPE = "VOID_TYPE"
 const CODE_BLOCK = "CODE_BLOCK"
@@ -218,7 +218,7 @@ leafName = {
     DECONSTRUCT_NAME: "name for deconstruction",
     FUN_DEF: "function definition",
     FUN_PARAM_DEF: "function parameter definition",
-    INLINE_SEQ: "inline sequence",
+    INLINE_ENUM: "inline enumerator",
     VOID_TYPE: "void type",
     CODE_BLOCK: "code block",
     TYPE_DEF: "type definition",
@@ -319,7 +319,7 @@ module.exports = {
     DECONSTRUCT_NAME,
     FUN_DEF,
     FUN_PARAM_DEF,
-    INLINE_SEQ,
+    INLINE_ENUM,
     VOID_TYPE,
     CODE_BLOCK,
     TYPE_DEF,

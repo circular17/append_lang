@@ -133,7 +133,7 @@ params // []
         { return [hd].concat(tl) }
 
 funKind
-    = "fun" / "sub" / "seq"
+    = "fun" / "sub" / "enum"
 
 purity
     = p:"state" _ { return p }
@@ -509,11 +509,11 @@ lambda
              body: body,
              returnType: returnType
          }, error) }
-     / isAsync:isAsync purity:purity "seq" __ returnType:(colon _ t:type __ { return t })? body:lambdaBody
-        { return tree.leaf(tree.INLINE_SEQ, {
+     / isAsync:isAsync purity:purity "enum" __ returnType:(colon _ t:type __ { return t })? body:lambdaBody
+        { return tree.leaf(tree.INLINE_ENUM, {
             isAsync,
             purity,
-            kind: "seq",
+            kind: "enum",
             body: body,
             returnType: returnType ?? "any"
         }, error) }
@@ -756,9 +756,9 @@ cartesianPower
     }
 
 range
-    = first:multiplication to:(_ op:(".." [=<] / "+..") __ lastOrCount:multiplication)? {
+    = first:multiplication to:(_ op:rangeOp __ lastOrCount:multiplication)? {
         if (to)
-            return tree.leaf(tree.RANGE, { first, lastOrCount: to.last, op: to.op }, error)
+            return tree.leaf(tree.RANGE, { first, lastOrCount: to.lastOrCount, op: to.op }, error)
         else
             return first
     }
@@ -978,7 +978,7 @@ eol = ([ \t] / comment)* "\r"? "\n" __
 
 keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return" / "yield" / "state"
     / "new" / "const" / "init" / "base" / "prop" / "me" / "with"
-    / "type" / "of" / "any" / "seq" / "enum" / "set" / "dict" / "yes" / "no" / "record"
+    / "type" / "of" / "any" / "enum" / "set" / "dict" / "yes" / "no" / "record"
     / "wise" / "else" / "while" / "iter" / "next" / "break" / "case" / "other" / "when" / "resume"
     / "in" / "or" / "xor" / "global" / "async" / "defer") ![A-Za-z0-9_]
 
@@ -996,7 +996,7 @@ composeOp = $(">>" !"=")
 setComparisonOp = "{=}" / "{!=}" / "{<}" / "{<=}" / "{>}" / "{>=}"
 setOp = "{-}" / "{+}" / "{&}" / "{*}" / "{^}"
 tildeOp = "~" // unused
-rangeOp = "..<" / "..="
+rangeOp = "..<" / "..=" / "..>=" / "..>" / "+.." / "-.."
 overridableOp
     = logicOp
     / comparisonOp

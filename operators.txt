@@ -2,6 +2,7 @@ To do :
 -------
 - reg ex (~ ?)
 - dot product (** ?)
+- range step
 
 Whitespace
 ----------
