@@ -65,6 +65,23 @@ deconstructElement
 typeDefs // []
     = "type" _ hd:typeDef tl:(_ ";" __ t:typeDef => t)*
         => hd::tl
+    / "trait" _ name:id __ "{" __ features:features __ "}"
+        => #TRAIT_DEF {
+            name,
+            features
+        }
+
+features
+    = hd:feature tl:((_ "," __ / eol) f:feature => f)*
+        => hd::tl
+
+feature
+    = funHeader
+    / propHeader
+    / traitInheritance
+
+traitInheritance
+    = "..." parent:getMember => #INHERITANCE { parent }
 
 typeDef
     = _ name:id genericParams:genericParams _ "=" _ type:type
@@ -402,7 +419,7 @@ voidableType
             ? #VOIDABLE_TYPE { type: nonVoidable }
             : nonVoidable }
 nonVoidableType
-    = namedType
+    = traitIntersection
     / anyType
     / genericParamType
     / listType
@@ -413,6 +430,14 @@ nonVoidableType
     / anonymousRecType
     / voidType
     / "(" __ t:type __ ")" => t
+
+traitIntersection
+    = hd:namedType tl:(__ "&" __ t:namedType => t)* {
+        if (tl.length > 0)
+            return #TRAIT_INTER { traits: hd::tl }
+        else
+            return hd
+    }
 
 listType = "[" __ elementType:type __ "]" => #LIST_TYPE { type: elementType }
 linkedListType = "::" _ elementType:type => #LINKED_LIST_TYPE { type: elementType }
@@ -432,12 +457,16 @@ dictType
 
 namedRecType
     = name:id genericParams:genericParams _ "{|" __
-    hd:namedRecMemberType tl:((_ "," / eol) __ m:namedRecMemberType => m)* __ "|}"
-        => #REC_TYPE {
+    hd:namedRecMemberType tl:((_ "," __ / eol) m:namedRecMemberType => m)*
+    close:(__ "|}")? {
+        if (!close)
+            error("Expecting \"|\x7d\" to close the record type")
+        return #REC_TYPE {
             name,
             genericParams,
             members: hd::tl
         }
+    }
 namedRecMemberType
     = namedRecInheritance
     / namedRecFieldType
@@ -455,16 +484,22 @@ namedRecFieldType
             error("The type or the value of the member must be specified")
         return #REC_MEMBER_TYPE { modifier, names, type, defaultValue }
     }
+    / modifier:"base" _ names:identifiers _ "=" __ defaultValue:valueExpr
+        => #REC_MEMBER_TYPE { modifier, names, defaultValue }
 namedRecFieldTypeModifier
-    = "const" / "base" / "init" / "var"
+    = "const" / "init" / "var"
 
 anonymousRecType
-    = "{|" __ hd:anonymousRecMemberType tl:((_ "," / eol) __ m:anonymousRecMemberType => m)* __ "|}"
-        => #REC_TYPE {
+    = "{|" __ hd:anonymousRecMemberType tl:((_ "," __ / eol) m:anonymousRecMemberType => m)*
+    close:(__ "|}")? {
+        if (!close)
+            error("Expecting \"|\x7d\" to close the record type")
+        return #REC_TYPE {
             name: null,
             genericParams: [],
             members: hd::tl
         }
+    }
 anonymousRecMemberType
     = anonymousRecFieldType
     / propDef
@@ -481,19 +516,23 @@ anonymousRecFieldTypeModifier
     = "const" / "var"
 
 propDef
-    = "prop" _ name:id _ type:type? __ purity:"state"? getter:getterBody setter:setter?
+    = p:propHeader getter:getterBody setter:setter? {
+        p.getter = getter
+        p.setter = setter
+        return p
+    }
+propHeader
+    = purity:(s:"state" _ => s)? "prop" _ name:id _ type:type?
         => #PROP_DEF {
-            name,
             purity: purity ?? "pure",
-            type,
-            getter,
-            setter
+            name,
+            type
         }
 setter
     = __ "set" _ body:lambda => body
 getterBody
-    = "=>" __ v:branch => v
-    / "{" __ s:funStatements __ "}"
+    = __ "=>" __ v:branch => v
+    / __ "{" __ s:funStatements __ "}"
         => #CODE_BLOCK { statements: s }
 
 lambda
@@ -876,7 +915,7 @@ recValue
         return #REC_VALUE { members: members ?? [] }
     }
 recMembers
-    = hd:recMemberValue tl:(_ ("," / eol) __ m:recMemberValue => m)*
+    = hd:recMemberValue tl:(_ ("," _ / eol) m:recMemberValue => m)*
 recMemberValue
     = recMemberFieldValue
     / propDef
@@ -998,7 +1037,7 @@ eol = ([ \t] / comment)* "\r"? "\n" __
 
 keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return" / "yield" / "state"
     / "new" / "const" / "init" / "base" / "prop" / "me" / "with"
-    / "type" / "of" / "any" / "enum" / "set" / "dict" / "yes" / "no" / "record"
+    / "type" / "of" / "any" / "enum" / "set" / "dict" / "yes" / "no" / "record" / "trait"
     / "wise" / "else" / "while" / "iter" / "next" / "break" / "case" / "other" / "when" / "resume"
     / "in" / "or" / "xor" / "global" / "async" / "defer") ![A-Za-z0-9_]
 

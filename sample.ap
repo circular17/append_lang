@@ -13,15 +13,29 @@ let problematic str = "this {a}"
 var anything any = "hello"   // this will be inferred
 var functionVar int->int->int = => $x + $y
 
-fun text str "*" count int do
+trait Concatenable { // "Self" is the type for which the trait is checked
+    fun left Self "++" right Self: Self
+}
+
+trait Countable {
+    prop count int
+}
+
+trait StringLike {
+    ...Concatenable,
+    fun a Self "substring" from int; to int: Self
+}
+
+// the following function only works on types that are both concatenable and countable
+fun a Concatenable & Countable "*" count int do
     count < 0 ?
         #err "Expecting positive repetition"
     else
         count
         | 0 -> ""
-        | 1 -> str
+        | 1 -> a
         other
-            str + str * (count - 1)
+            a ++ a * (count - 1)
 end
 
 // function "someStuff" without parameters, return void or an error
@@ -205,7 +219,7 @@ record Locale {|
     prop calendar str => _instance.calendar // readonly via accessor
 
     var _positive int: 0 // private read/write, with default value
-    prop positive int // public read/write via accessor
+    state prop positive int // public read/write via accessor
         => _positive
         set => $v >= 0 ? _positive := $v
 
@@ -225,7 +239,7 @@ let defaultLocale = Locale {| identifier: () |} // tag has default value
 
 record FrenchLocale {|
     ...Locale,
-    base identifier: "fr-FR"
+    base identifier = "fr-FR"
     var croissants int
     new
         croissants := 3 + 5 random
@@ -365,7 +379,7 @@ record Console {|
 |}
 
 record JSConsole {|
-    ...Console,
+    ...Console
     sub data any "log" => data JS--Console.log
 |}
 

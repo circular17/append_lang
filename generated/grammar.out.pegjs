@@ -65,6 +65,23 @@ deconstructElement
 typeDefs // []
     = "type" _ hd:typeDef tl:(_ ";" __ t:typeDef { return t })*
         { return [hd].concat(tl) }
+    / "trait" _ name:id __ "{" __ features:features __ "}"
+        { return tree.leaf(tree.TRAIT_DEF, {
+            name,
+            features
+        }, error) }
+
+features
+    = hd:feature tl:((_ "," __ / eol) f:feature { return f })*
+        { return [hd].concat(tl) }
+
+feature
+    = funHeader
+    / propHeader
+    / traitInheritance
+
+traitInheritance
+    = "..." parent:getMember { return tree.leaf(tree.INHERITANCE, { parent }, error) }
 
 typeDef
     = _ name:id genericParams:genericParams _ "=" _ type:type
@@ -402,7 +419,7 @@ voidableType
             ? tree.leaf(tree.VOIDABLE_TYPE, { type: nonVoidable }, error)
             : nonVoidable }
 nonVoidableType
-    = namedType
+    = traitIntersection
     / anyType
     / genericParamType
     / listType
@@ -413,6 +430,14 @@ nonVoidableType
     / anonymousRecType
     / voidType
     / "(" __ t:type __ ")" { return t }
+
+traitIntersection
+    = hd:namedType tl:(__ "&" __ t:namedType { return t })* {
+        if (tl.length > 0)
+            return tree.leaf(tree.TRAIT_INTER, { traits: [hd].concat(tl) }, error)
+        else
+            return hd
+    }
 
 listType = "[" __ elementType:type __ "]" { return tree.leaf(tree.LIST_TYPE, { type: elementType }, error) }
 linkedListType = "::" _ elementType:type { return tree.leaf(tree.LINKED_LIST_TYPE, { type: elementType }, error) }
@@ -432,12 +457,16 @@ dictType
 
 namedRecType
     = name:id genericParams:genericParams _ "{|" __
-    hd:namedRecMemberType tl:((_ "," / eol) __ m:namedRecMemberType { return m })* __ "|}"
-        { return tree.leaf(tree.REC_TYPE, {
+    hd:namedRecMemberType tl:((_ "," __ / eol) m:namedRecMemberType { return m })*
+    close:(__ "|}")? {
+        if (!close)
+            error("Expecting \"|\x7d\" to close the record type")
+        return tree.leaf(tree.REC_TYPE, {
             name,
             genericParams,
             members: [hd].concat(tl)
-        }, error) }
+        }, error)
+    }
 namedRecMemberType
     = namedRecInheritance
     / namedRecFieldType
@@ -455,16 +484,22 @@ namedRecFieldType
             error("The type or the value of the member must be specified")
         return tree.leaf(tree.REC_MEMBER_TYPE, { modifier, names, type, defaultValue }, error)
     }
+    / modifier:"base" _ names:identifiers _ "=" __ defaultValue:valueExpr
+        { return tree.leaf(tree.REC_MEMBER_TYPE, { modifier, names, defaultValue }, error) }
 namedRecFieldTypeModifier
-    = "const" / "base" / "init" / "var"
+    = "const" / "init" / "var"
 
 anonymousRecType
-    = "{|" __ hd:anonymousRecMemberType tl:((_ "," / eol) __ m:anonymousRecMemberType { return m })* __ "|}"
-        { return tree.leaf(tree.REC_TYPE, {
+    = "{|" __ hd:anonymousRecMemberType tl:((_ "," __ / eol) m:anonymousRecMemberType { return m })*
+    close:(__ "|}")? {
+        if (!close)
+            error("Expecting \"|\x7d\" to close the record type")
+        return tree.leaf(tree.REC_TYPE, {
             name: null,
             genericParams: [],
             members: [hd].concat(tl)
-        }, error) }
+        }, error)
+    }
 anonymousRecMemberType
     = anonymousRecFieldType
     / propDef
@@ -481,19 +516,23 @@ anonymousRecFieldTypeModifier
     = "const" / "var"
 
 propDef
-    = "prop" _ name:id _ type:type? __ purity:"state"? getter:getterBody setter:setter?
+    = p:propHeader getter:getterBody setter:setter? {
+        p.getter = getter
+        p.setter = setter
+        return p
+    }
+propHeader
+    = purity:(s:"state" _ { return s })? "prop" _ name:id _ type:type?
         { return tree.leaf(tree.PROP_DEF, {
-            name,
             purity: purity ?? "pure",
-            type,
-            getter,
-            setter
+            name,
+            type
         }, error) }
 setter
     = __ "set" _ body:lambda { return body }
 getterBody
-    = "=>" __ v:branch { return v }
-    / "{" __ s:funStatements __ "}"
+    = __ "=>" __ v:branch { return v }
+    / __ "{" __ s:funStatements __ "}"
         { return tree.leaf(tree.CODE_BLOCK, { statements: s }, error) }
 
 lambda
@@ -876,7 +915,7 @@ recValue
         return tree.leaf(tree.REC_VALUE, { members: members ?? [] }, error)
     }
 recMembers
-    = hd:recMemberValue tl:(_ ("," / eol) __ m:recMemberValue { return m })*
+    = hd:recMemberValue tl:(_ ("," _ / eol) m:recMemberValue { return m })*
 recMemberValue
     = recMemberFieldValue
     / propDef
@@ -998,7 +1037,7 @@ eol = ([ \t] / comment)* "\r"? "\n" __
 
 keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return" / "yield" / "state"
     / "new" / "const" / "init" / "base" / "prop" / "me" / "with"
-    / "type" / "of" / "any" / "enum" / "set" / "dict" / "yes" / "no" / "record"
+    / "type" / "of" / "any" / "enum" / "set" / "dict" / "yes" / "no" / "record" / "trait"
     / "wise" / "else" / "while" / "iter" / "next" / "break" / "case" / "other" / "when" / "resume"
     / "in" / "or" / "xor" / "global" / "async" / "defer") ![A-Za-z0-9_]
 
