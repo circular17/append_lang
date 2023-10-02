@@ -39,6 +39,8 @@ fun a Concatenable & Countable "*" count int do
             a ++ a * (count - 1)
 end
 
+sub toDiscard "drop" => ()
+
 // function "someStuff" without parameters, return void or an error
 fun () "someStuff": #done | #err any do
     () someOperation
