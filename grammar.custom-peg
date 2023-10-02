@@ -83,8 +83,8 @@ recordDef
     = "record" _ n:namedRecType => n
 
 explicitModuleBlock
-    = "do" __ s:moduleStatements __ when:when? __ "end"
-        => #CODE_BLOCK { statements: s, when }
+    = "do" effects:effects? __ s:moduleStatements __ when:when? __ "end"
+        => #CODE_BLOCK { statements: s, effects: effects ?? [], when }
 
 when
     = "when" (eol _ pipe? _ / __) c:caseBody => c
@@ -100,7 +100,8 @@ fun
 funHeader
     = isGlobal:isGlobal isAsync:isAsync purity:purity
     kind:funKind _ hd:funParam __ "\"" keywordName:$(keyword?) name:(id / overridableOp)? "\""
-    tl:(__ p:params => p)? returnType:(_ colon __ t:type => t)? {
+    tl:(__ p:params => p)? returnType:(_ colon __ t:type => t)?
+    effects:(__ "with" _ e:identifiers => e)? {
         if (keywordName)
             error(`The keyword '${keywordName}' cannot be used as an identifier`)
         if (!name)
@@ -112,6 +113,7 @@ funHeader
             kind,
             name,
             params: [hd].concat(tl ?? []),
+            effects: effects ?? [],
             returnType
         }
     }
@@ -152,8 +154,8 @@ funBody
     / keyword { error("Unexpected keyword") }
 
 explicitFunBlock
-    = "do" __ s:funStatements __ when:when? __ "end"
-        => #CODE_BLOCK { statements: s, when }
+    = "do" effects:effects? __ s:funStatements __ when:when? __ "end"
+        => #CODE_BLOCK { statements: s, effects: effects ?? [], when }
 
 funStatements // []
     = hd:funStatement tl:(statementSeparator s:funStatement => s)*
@@ -575,7 +577,7 @@ pipedExpr
 valueExpr = assignment
 
 assignment
-    = variable:default assign:assignValue? {
+    = variable:withEffect assign:assignValue? {
         if (assign)
         {
             assign.variable = variable
@@ -588,6 +590,18 @@ assignment
 assignValue
     = _ op:assignmentOp __ value:branch
         => #ASSIGN { operator: op, value }
+
+withEffect
+    = value:default effects:effects? {
+        if (effects)
+            return #WITH_EFFECT { value, effects }
+        else
+            return value
+    }
+
+effects // []
+    = _ "with" _ hd:default tl:(_ "," __ d:default => d)*
+        => hd::tl
 
 default = hd:disjunction tl:(__ "??" __ d:default => d)* {
         return tl.length > 0

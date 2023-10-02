@@ -206,6 +206,7 @@ const SET_INTER = "SET_INTER"
 const SET_COMPARISON = "SET_COMPARISON"
 const SET_COMPARISON_OPERAND = "SET_COMPARISON_OPERAND"
 const SPECIALIZE_TYPE = "SPECIALIZE_TYPE"
+const WITH_EFFECT = "WITH_EFFECT"
 
 leafName = {
     MODULE: "module",
@@ -302,7 +303,8 @@ leafName = {
     SET_INTER: "set intersection",
     SET_COMPARISON: "set comparison",
     SET_COMPARISON_OPERAND: "set comparison operand",
-    SPECIALIZE_TYPE: "type specialization"
+    SPECIALIZE_TYPE: "type specialization",
+    WITH_EFFECT: "expression with effect"
 }
 
 module.exports = {
@@ -403,5 +405,6 @@ module.exports = {
     SET_INTER,
     SET_COMPARISON,
     SET_COMPARISON_OPERAND,
-    SPECIALIZE_TYPE
+    SPECIALIZE_TYPE,
+    WITH_EFFECT
 };

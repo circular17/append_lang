@@ -369,3 +369,22 @@ record JSConsole {|
     sub data any "log" => data JS--Console.log
 |}
 
+fun message str "print" with Console
+    => message Console.log
+
+"Hello" print with JSConsole
+
+do with JSConsole
+    "Hello" print
+end
+
+fun fileName "readFile": str with io do
+    // Reads a file, which is a side effect
+end
+
+enum filename "getLines": str with io do
+    var file = filename openFile
+    while file !eof
+        yield file readLine
+    file close
+end

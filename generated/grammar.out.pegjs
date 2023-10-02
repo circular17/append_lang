@@ -83,8 +83,8 @@ recordDef
     = "record" _ n:namedRecType { return n }
 
 explicitModuleBlock
-    = "do" __ s:moduleStatements __ when:when? __ "end"
-        { return tree.leaf(tree.CODE_BLOCK, { statements: s, when }, error) }
+    = "do" effects:effects? __ s:moduleStatements __ when:when? __ "end"
+        { return tree.leaf(tree.CODE_BLOCK, { statements: s, effects: effects ?? [], when }, error) }
 
 when
     = "when" (eol _ pipe? _ / __) c:caseBody { return c }
@@ -100,7 +100,8 @@ fun
 funHeader
     = isGlobal:isGlobal isAsync:isAsync purity:purity
     kind:funKind _ hd:funParam __ "\"" keywordName:$(keyword?) name:(id / overridableOp)? "\""
-    tl:(__ p:params { return p })? returnType:(_ colon __ t:type { return t })? {
+    tl:(__ p:params { return p })? returnType:(_ colon __ t:type { return t })?
+    effects:(__ "with" _ e:identifiers { return e })? {
         if (keywordName)
             error(`The keyword '${keywordName}' cannot be used as an identifier`)
         if (!name)
@@ -112,6 +113,7 @@ funHeader
             kind,
             name,
             params: [hd].concat(tl ?? []),
+            effects: effects ?? [],
             returnType
         }, error)
     }
@@ -152,8 +154,8 @@ funBody
     / keyword { error("Unexpected keyword") }
 
 explicitFunBlock
-    = "do" __ s:funStatements __ when:when? __ "end"
-        { return tree.leaf(tree.CODE_BLOCK, { statements: s, when }, error) }
+    = "do" effects:effects? __ s:funStatements __ when:when? __ "end"
+        { return tree.leaf(tree.CODE_BLOCK, { statements: s, effects: effects ?? [], when }, error) }
 
 funStatements // []
     = hd:funStatement tl:(statementSeparator s:funStatement { return s })*
@@ -575,7 +577,7 @@ pipedExpr
 valueExpr = assignment
 
 assignment
-    = variable:default assign:assignValue? {
+    = variable:withEffect assign:assignValue? {
         if (assign)
         {
             assign.variable = variable
@@ -588,6 +590,18 @@ assignment
 assignValue
     = _ op:assignmentOp __ value:branch
         { return tree.leaf(tree.ASSIGN, { operator: op, value }, error) }
+
+withEffect
+    = value:default effects:effects? {
+        if (effects)
+            return tree.leaf(tree.WITH_EFFECT, { value, effects }, error)
+        else
+            return value
+    }
+
+effects // []
+    = _ "with" _ hd:default tl:(_ "," __ d:default { return d })*
+        { return [hd].concat(tl) }
 
 default = hd:disjunction tl:(__ "??" __ d:default { return d })* {
         return tl.length > 0
