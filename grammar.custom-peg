@@ -104,7 +104,7 @@ explicitModuleBlock
         => #CODE_BLOCK { statements: s, effects: effects ?? [], when }
 
 when
-    = "when" (eol _ pipe? _ / __) c:caseBody => c
+    = "when" (eol pipe _ / _) c:caseBody => c
 
 /************* FUNCTION DEFINITION *************/
 
@@ -238,7 +238,7 @@ ternary
     = __ "?" __ ifTrue:(branch / inlineBlock / return) ifFalse:(__ "else" __ v:(branch / inlineBlock / return) => v)?
         => #TERNARY { ifTrue, ifFalse }
 case
-    = _ ("case" __ pipe? _ / eol _ pipe _) c:caseBody => c
+    = _ ("case" _ / eol pipe _) c:caseBody => c
 
 inlineBlock
     = "{" !(([-+&*^] / [><] "="? / "!=") "}") __ statements:funStatements __ "}"

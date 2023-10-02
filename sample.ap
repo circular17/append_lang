@@ -2,8 +2,9 @@
 var a/b = 5e10; c int = () ?? 7; d int
 var number int | float | decimal = 5.4
 var point #vec float*float = #vec (12.5, 8)
-var pointStruct #point {| x float, y float |} = {| x: 3, y: 45.4 |}
-global fun p1 #point {| x float, y float |} "+" p2 #point {| x float, y float |}
+type TaggedPoint = #point {| x float, y float |}
+var pointStruct TaggedPoint = {| x: 3, y: 45.4 |}
+global fun p1 TaggedPoint "+" p2 TaggedPoint
     => #point {| x: p1.x + p2.x, y: p1.y + p2.y |}
 let {| x: myX, y: myY, coords: (a, b, c) |} = pointStruct
 var {| x, y |} = pointStruct <| x: 4
@@ -120,8 +121,7 @@ fun size any^3 "cubeVolume" do
         let surface = x * y
         surface * z
     }
-when
-    _ -> #fail // hide error detail
+when _ -> #fail // hide error detail
 end
 
 // doing things on a tuple

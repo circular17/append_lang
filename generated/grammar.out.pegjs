@@ -104,7 +104,7 @@ explicitModuleBlock
         { return tree.leaf(tree.CODE_BLOCK, { statements: s, effects: effects ?? [], when }, error) }
 
 when
-    = "when" (eol _ pipe? _ / __) c:caseBody { return c }
+    = "when" (eol pipe _ / _) c:caseBody { return c }
 
 /************* FUNCTION DEFINITION *************/
 
@@ -238,7 +238,7 @@ ternary
     = __ "?" __ ifTrue:(branch / inlineBlock / return) ifFalse:(__ "else" __ v:(branch / inlineBlock / return) { return v })?
         { return tree.leaf(tree.TERNARY, { ifTrue, ifFalse }, error) }
 case
-    = _ ("case" __ pipe? _ / eol _ pipe _) c:caseBody { return c }
+    = _ ("case" _ / eol pipe _) c:caseBody { return c }
 
 inlineBlock
     = "{" !(([-+&*^] / [><] "="? / "!=") "}") __ statements:funStatements __ "}"
