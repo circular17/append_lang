@@ -3,6 +3,7 @@ To do :
 - reg ex (~ ?)
 - dot product (** ?)
 - range step
+- like type
 
 Whitespace
 ----------

@@ -40,7 +40,7 @@ fun a Concatenable & Countable "*" count int do
 end
 
 // function "someStuff" without parameters, return void or an error
-fun () "someStuff": () | #err any do
+fun () "someStuff": #done | #err any do
     () someOperation
     mut a add "world"
     a[5] := "hello"
@@ -74,8 +74,8 @@ fun list ::any "length": int
     | head::tail -> 1 + (tail length)
     | <> -> 0
 
-var optionalList [int]? = ()
-optionalList = [1, 2, 3]
+var optionalList [int]? = #none
+optionalList = #some [1, 2, 3]
 mut optionalList ins (-12); 0
 mut optionalList del 1+..2 // range from 1, 2 elements long
 
@@ -137,11 +137,11 @@ end
 }
 
 // iterating
-0..<10 each :j {
+0 ..< 10 each :j {
     "j = {j}" print
 }
 
-0..=9 each => "n = {$n}" print
+0 ..= 9 each => "n = {$n}" print
 
 var i = 0
 while i < 10 {
@@ -155,19 +155,19 @@ fun list "has" element =>
     | #none -> no
     other yes
 
-var _locales dict{(str | ()) -> any} = dict{ }
+var _locales dict{str? -> any} = dict{ }
 state fun identifier "locale" do
     _locales has identifier ?
         _locales[identifier]
     else
     {
-        let instance JSObject = JS--Intl--Locale new identifier
+        let instance JSObject = new JS--Intl--Locale (identifier)
         _locales[identifier] := instance
         instance
     }
 end
 
-let fixed = {| size: 15, frac: 0, group: yes, locale: (), var temp: "" |}
+let fixed = {| size: 15, frac: 0, group: yes, locale: #none, var temp: "" |}
 fun value float "as" format do
 
 end
@@ -213,7 +213,7 @@ var _localeCount = 0 // private static variable of module
 
 record Locale {|
     const identifier str? // voidable and readonly because not var
-    tag any: () // freely accessible, need to copy the array to modify, with default value
+    tag any?: #none // freely accessible, need to copy the array to modify, with default value
 
     init _instance JS--Intl--Locale // private and readonly
     prop calendar str => _instance.calendar // readonly via accessor
@@ -225,7 +225,7 @@ record Locale {|
 
     new | #err str
         // identifier will need to be set in initialization record expression
-        _instance := JS--Intl--Locale new identifier
+        _instance := new JS--Intl--Locale (identifier ?? "")
         _localeCount += 1
     end
 |}
@@ -235,7 +235,7 @@ fun locale Locale "showInfo" do
     "This locale is identified by: {locale.identifier}" print
 end
 
-let defaultLocale = Locale {| identifier: () |} // tag has default value
+let defaultLocale = new Locale {| identifier: #none |} // tag has default value
 
 record FrenchLocale {|
     ...Locale,
@@ -264,6 +264,9 @@ async sub urls "gatherData" =>
 // async implicit await
 let entries = "phonebook.txt" readFile
 
+record @T-Enum {| state fun () "fetch": T? => ? |}
+record @T-AsyncEnum {| async state fun () "fetch": T? => ? |}
+
 enum n int "getNumbersSeq": int do
     var i int = 0
     while i < n {
@@ -272,25 +275,25 @@ enum n int "getNumbersSeq": int do
     }
 end
 
-let numbersEnum enum->int = enum: int {
+let numbersEnum int-Enum = enum: int {
     yield 1
     yield 2
     yield 3
     yield 4
 }
 
-fun lst enum->@T "tally": dict{@T -> int} do
+fun lst @T-Enum "tally": dict{@T -> int} do
     var counts dict{T -> int} = dict{}
     lst each :x => counts[x] = (counts[x] ?? 0) + 1 // supposing that ?? can be applied to (#ok T | #none)
     counts
 end
 
-fun lst enum->@T "each" action @T->any: #done | any do
+fun lst @T-Enum "each" action @T->any: #done | any do
     iter () lst.fetch // could be implicit await, could be io
     | #done -> break
     | #ok @item -> {
         item action
-        | (), #done, #ok @subItem -> next
+        | #done, #ok @subItem -> next
         | @subError -> return error
     }
     | @error -> return error
@@ -303,18 +306,18 @@ fun keys set{@T} "associate" f @T->@U : dict{@T -> @U} do
     result
 end
 
-fun ab (enum->@T)^2 "tally": dict{@T -> int*int} do
+fun ab @T-Enum^2 "tally": dict{@T -> int*int} do
     let (aCounts, bCounts) = ab each tally
     let allKeys = aCounts.keys {+} bCounts.keys
     allKeys associate :k => (aCounts[k] ?? 0, bCounts[k] ?? 0)
 end
 
-fun a enum->@T "listUnion" b enum->@T: [@T] do
+fun a @T-Enum "listUnion" b @T-Enum: [@T] do
     (a, b) tally \ flatMap :k T; v int*int
         => [k] * (v max)
 end
 
-fun a enum->@T "listDiff" b enum->@T: [@T] do
+fun a @T-Enum "listDiff" b @T-Enum: [@T] do
     let aCounts = a tally
     let bCounts = b tally
 
@@ -322,7 +325,7 @@ fun a enum->@T "listDiff" b enum->@T: [@T] do
         [k] * ((v - (bCounts[k] ?? 0), 0) max)
 end
 
-fun a enum->@T "listInter" b enum->@T: [@T] do
+fun a @T-Enum "listInter" b @T-Enum: [@T] do
     let aCounts = a tally
     let bCounts = b tally
 
@@ -335,13 +338,8 @@ state fun () "counter": int do
     myCounter += 1
 end
 
-// enum->@T
-// {| state fun () "fetch": T? => ? |}
-// async enum->@T
-// {| async state fun () "fetch": T? => ? |}
-
-fun n @T "getNumbersEnum": enum->@T =>
-  {|
+fun n @T "getNumbersEnum" =>
+  new T-Enum {|
     var _current T: 0
     _last T: n
     state fun () "fetch" =>
@@ -353,14 +351,14 @@ fun n @T "getNumbersEnum": enum->@T =>
     state fun () "close" => ()
   |}
 
-var myEnum enum->int = 5 getNumbersEnum
-iter () myEnum.get
+var myEnum int-Enum = 5 getNumbersEnum
+iter () myEnum.fetch
     | #ok @i -> { "Number {i}" print. next }
     other break
 () myEnum.close
 
 // Range from low to high excluded
-fun low @T "..<" high @T: enum->@T =>
+fun low @T "..<" high @T: @T-Enum =>
   {|
     var _current T: low
     _high T: high

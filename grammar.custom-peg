@@ -84,7 +84,7 @@ traitInheritance
     = "..." parent:getMember => #INHERITANCE { parent }
 
 typeDef
-    = _ name:id genericParams:genericParams _ "=" _ type:type
+    = _ genericParams:genericParams _ name:id _ "=" _ type:type
         => #TYPE_DEF {
             name,
             genericParams: genericParams,
@@ -92,7 +92,7 @@ typeDef
         }
 
 genericParams
-    = _ "of" __ "@" hd:id tl:(_ "/" __ "@" i:id => i)*
+    = "@" hd:id tl:(_ "-" __ "@" i:id => i)*
         => hd::tl
     / "" => []
 
@@ -168,7 +168,6 @@ funBody
     / __ "=>" _ "?" => null
     / __ explicitFunBlock
     / case
-    / keyword { error("Unexpected keyword") }
 
 explicitFunBlock
     = "do" effects:effects? __ s:funStatements __ when:when? __ "end"
@@ -294,7 +293,7 @@ untaggedPattern
     / dictPattern
 
 comparisonPattern
-    = operator:(">" / ">=" / $("<" ![>|]) / "<=" / "in") _ value:aboveComparison
+    = operator:(">" / ">=" / leftAngleBracket / "<=" / "in") _ value:aboveComparison
 
 tuplePattern
     = "(" startEllipsis:(_ "...")? __ hd:pattern tl:(_ "," __ v:pattern => v)*
@@ -374,9 +373,15 @@ type = unionType
 
 unionType
     = hd:taggedType tl:(_ pipe __ t:taggedType => t)* {
-        return tl.length > 0
-            ? #UNION_TYPE { params: hd::tl }
-            : hd }
+        if (tl.length > 0) {
+            const types = hd::tl
+            if (types.some(t => tree.isVoidType(t)))
+                error("Void type cannot be in an union")
+            return #UNION_TYPE { types }
+        }
+        else
+            return hd
+    }
 
 taggedType
     = tag:tag type:(_ t:taggedType => t)?
@@ -387,7 +392,7 @@ taggedType
     / functionType
 
 functionType
-    = isAsync:isAsync purity:purity hd:recordMerge tl:(_ "->" __ t:recordMerge => t)* {
+    = isAsync:isAsync purity:purity hd:voidTypeOrNot tl:(_ "->" __ t:voidTypeOrNot => t)* {
         return tl.length > 0
             ? #FUN_TYPE {
                 isAsync,
@@ -395,6 +400,10 @@ functionType
                 params: hd::tl
             }
             : hd }
+
+voidTypeOrNot
+    = voidType
+    / recordMerge
 
 recordMerge
     = hd:tupleType tl:(_ "++" __ tupleType)* {
@@ -409,22 +418,20 @@ tupleType
             ? #TUPLE_TYPE { types: hd::tl }
             : hd }
 tuplePowerType
-    = base:voidableType power:(_ powerOp __ i:integer => i)? {
+    = base:optionType power:(_ powerOp __ i:integer => i)? {
         return power
             ? #TUPLE_POWER_TYPE { base, power }
             : base }
-voidableType
-    = nonVoidable:nonVoidableType isVoidable:"?"? {
-        return isVoidable
-            ? #VOIDABLE_TYPE { type: nonVoidable }
-            : nonVoidable }
-nonVoidableType
+optionType
+    = atomic:atomicType isOption:"?"? {
+        return isOption
+            ? #OPTION_TYPE { type: atomic }
+            : atomic }
+atomicType
     = traitIntersection
     / anyType
-    / genericParamType
     / listType
     / linkedListType
-    / enumType
     / setType
     / dictType
     / anonymousRecType
@@ -432,7 +439,7 @@ nonVoidableType
     / "(" __ t:type __ ")" => t
 
 traitIntersection
-    = hd:namedType tl:(__ "&" __ t:namedType => t)* {
+    = hd:specializeType tl:(__ "&" __ t:specializeType => t)* {
         if (tl.length > 0)
             return #TRAIT_INTER { traits: hd::tl }
         else
@@ -442,13 +449,6 @@ traitIntersection
 listType = "[" __ elementType:type __ "]" => #LIST_TYPE { type: elementType }
 linkedListType = "::" _ elementType:type => #LINKED_LIST_TYPE { type: elementType }
 
-enumType
-    = isAsync:isAsync "enum" elementType:(_ "->" __ t:recordMerge => t)?
-        => #ENUM_TYPE {
-            isAsync,
-            elementType: elementType ?? "any"
-        }
-
 setType = "set" _ "{" __ elementType:type __ "}" => #SET_TYPE { type: elementType }
 
 dictType
@@ -456,14 +456,13 @@ dictType
         => #DICT_TYPE { key, value }
 
 namedRecType
-    = name:id genericParams:genericParams _ "{|" __
+    = type:specializeType _ "{|" __
     hd:namedRecMemberType tl:((_ "," __ / eol) m:namedRecMemberType => m)*
     close:(__ "|}")? {
         if (!close)
             error("Expecting \"|\x7d\" to close the record type")
         return #REC_TYPE {
-            name,
-            genericParams,
+            type,
             members: hd::tl
         }
     }
@@ -475,7 +474,7 @@ namedRecMemberType
     / constructor
 
 namedRecInheritance
-    = "..." parent:namedType => #INHERITANCE { parent }
+    = "..." parent:specializeType => #INHERITANCE { parent }
 
 namedRecFieldType
     = modifier:namedRecFieldTypeModifier? names:(_ i:identifiers => i) type:(_ t:type => t)?
@@ -495,8 +494,7 @@ anonymousRecType
         if (!close)
             error("Expecting \"|\x7d\" to close the record type")
         return #REC_TYPE {
-            name: null,
-            genericParams: [],
+            typoe: null,
             members: hd::tl
         }
     }
@@ -560,7 +558,6 @@ lambda
         => #INLINE_ENUM {
             isAsync,
             purity,
-            kind: "enum",
             body: body,
             returnType: returnType ?? "any"
         }
@@ -587,15 +584,14 @@ constructorBody
 
 voidType = void => #VOID_TYPE {}
 
-namedType = base:valueByName params:genericOrSpecializeParams? {
-        if (params)
-            return #SPECIALIZE_TYPE { base, params }
+specializeType
+    = hd:(genericParamType / valueByName) tl:(_ "-" __ t:(genericParamType / valueByName))* {
+        let types = hd::tl
+        if (types.length > 1)
+            return #SPECIALIZE_TYPE { base: types.pop(), params: types }
         else
-            return base
+            return hd
     }
-genericOrSpecializeParams
-    = _ "of" __ hd:(genericParamType / valueByName) tl:(_ "/" __ t:(genericParamType / valueByName) => t)*
-        => hd::tl
 
 genericParamType = "@" id:id => #GENERIC_PARAM_TYPE { name: id }
 anyType = "any" => #ANY_TYPE {}
@@ -759,7 +755,7 @@ nestedCall
     }
 
 appendCall
-    = _ fun:(multiplication / "new") defer:(_ "defer")? params:rightParams?
+    = _ fun:multiplication defer:(_ "defer")? params:rightParams?
         => #CALL { fun, defer: !!defer, params: params ?? [] }
 
 rightParams
@@ -878,7 +874,8 @@ atom
     / dictValue
     / float
     / string
-    / specializedType
+    / newRecord
+    / getMember
     / lambda
     / voidValue
     / boolean
@@ -910,7 +907,7 @@ tuple
         }
 
 recValue
-    = "{|" __ members:recMembers? close:(__  "|}")? {
+    = "{|" __ members:recMembers? close:(__  "|}") {
         if (!close) error("Expecting \"|\x7d\" to close the record")
         return #REC_VALUE { members: members ?? [] }
     }
@@ -960,17 +957,9 @@ dictKeyValue
         => #DICT_KEY_VALUE { key, value }
     / splat
 
-specializedType
-    = member:getMember params:specializeParams? {
-        if (params)
-            return #SPECIALIZE_TYPE { base: member, params }
-        else
-            return member
-    }
-
-specializeParams
-    = _ "of" __ hd:valueByName tl:(_ "/" __ i:valueByName => i)*
-        => hd::tl
+newRecord
+    = "new" _ type:specializeType __ params:(recValue/tuple)
+        => #CREATE_OBJECT { type, params }
 
 getMember
     = container:(valueByName / implicitParam / "me")
@@ -1037,7 +1026,7 @@ eol = ([ \t] / comment)* "\r"? "\n" __
 
 keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return" / "yield" / "state"
     / "new" / "const" / "init" / "base" / "prop" / "me" / "with"
-    / "type" / "of" / "any" / "enum" / "set" / "dict" / "yes" / "no" / "record" / "trait"
+    / "type" / "any" / "enum" / "set" / "dict" / "yes" / "no" / "record" / "trait"
     / "wise" / "else" / "while" / "iter" / "next" / "break" / "case" / "other" / "when" / "resume"
     / "in" / "or" / "xor" / "global" / "async" / "defer") ![A-Za-z0-9_]
 
@@ -1046,7 +1035,8 @@ colon = $(":" ![=:])
 
 pipe = $("|" !"}")
 logicOp = "or" / "xor" / $("&" !"=")
-comparisonOp = $("=" !">") / "!=" / $(">" ![>=<]) / ">=" / $("<" ![>|]) / "<=" / "in";
+comparisonOp = $("=" !">") / "!=" / $(">" ![>=<]) / ">=" / leftAngleBracket / "<=" / "in"
+leftAngleBracket = $("<" ![>|])
 concatOp = $("++" !"=")
 additiveOp = $(("+" / "-") !([=>] / ".."))
 multiplicativeOp = $(("*" / "/" / "%") !"=")

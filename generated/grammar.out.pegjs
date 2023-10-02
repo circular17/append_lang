@@ -84,7 +84,7 @@ traitInheritance
     = "..." parent:getMember { return tree.leaf(tree.INHERITANCE, { parent }, error) }
 
 typeDef
-    = _ name:id genericParams:genericParams _ "=" _ type:type
+    = _ genericParams:genericParams _ name:id _ "=" _ type:type
         { return tree.leaf(tree.TYPE_DEF, {
             name,
             genericParams: genericParams,
@@ -92,7 +92,7 @@ typeDef
         }, error) }
 
 genericParams
-    = _ "of" __ "@" hd:id tl:(_ "/" __ "@" i:id { return i })*
+    = "@" hd:id tl:(_ "-" __ "@" i:id { return i })*
         { return [hd].concat(tl) }
     / "" { return [] }
 
@@ -168,7 +168,6 @@ funBody
     / __ "=>" _ "?" { return null }
     / __ explicitFunBlock
     / case
-    / keyword { error("Unexpected keyword") }
 
 explicitFunBlock
     = "do" effects:effects? __ s:funStatements __ when:when? __ "end"
@@ -294,7 +293,7 @@ untaggedPattern
     / dictPattern
 
 comparisonPattern
-    = operator:(">" / ">=" / $("<" ![>|]) / "<=" / "in") _ value:aboveComparison
+    = operator:(">" / ">=" / leftAngleBracket / "<=" / "in") _ value:aboveComparison
 
 tuplePattern
     = "(" startEllipsis:(_ "...")? __ hd:pattern tl:(_ "," __ v:pattern { return v })*
@@ -374,9 +373,15 @@ type = unionType
 
 unionType
     = hd:taggedType tl:(_ pipe __ t:taggedType { return t })* {
-        return tl.length > 0
-            ? tree.leaf(tree.UNION_TYPE, { params: [hd].concat(tl) }, error)
-            : hd }
+        if (tl.length > 0) {
+            const types = [hd].concat(tl)
+            if (types.some(t => tree.isVoidType(t)))
+                error("Void type cannot be in an union")
+            return tree.leaf(tree.UNION_TYPE, { types }, error)
+        }
+        else
+            return hd
+    }
 
 taggedType
     = tag:tag type:(_ t:taggedType { return t })?
@@ -387,7 +392,7 @@ taggedType
     / functionType
 
 functionType
-    = isAsync:isAsync purity:purity hd:recordMerge tl:(_ "->" __ t:recordMerge { return t })* {
+    = isAsync:isAsync purity:purity hd:voidTypeOrNot tl:(_ "->" __ t:voidTypeOrNot { return t })* {
         return tl.length > 0
             ? tree.leaf(tree.FUN_TYPE, {
                 isAsync,
@@ -395,6 +400,10 @@ functionType
                 params: [hd].concat(tl)
             }, error)
             : hd }
+
+voidTypeOrNot
+    = voidType
+    / recordMerge
 
 recordMerge
     = hd:tupleType tl:(_ "++" __ tupleType)* {
@@ -409,22 +418,20 @@ tupleType
             ? tree.leaf(tree.TUPLE_TYPE, { types: [hd].concat(tl) }, error)
             : hd }
 tuplePowerType
-    = base:voidableType power:(_ powerOp __ i:integer { return i })? {
+    = base:optionType power:(_ powerOp __ i:integer { return i })? {
         return power
             ? tree.leaf(tree.TUPLE_POWER_TYPE, { base, power }, error)
             : base }
-voidableType
-    = nonVoidable:nonVoidableType isVoidable:"?"? {
-        return isVoidable
-            ? tree.leaf(tree.VOIDABLE_TYPE, { type: nonVoidable }, error)
-            : nonVoidable }
-nonVoidableType
+optionType
+    = atomic:atomicType isOption:"?"? {
+        return isOption
+            ? tree.leaf(tree.OPTION_TYPE, { type: atomic }, error)
+            : atomic }
+atomicType
     = traitIntersection
     / anyType
-    / genericParamType
     / listType
     / linkedListType
-    / enumType
     / setType
     / dictType
     / anonymousRecType
@@ -432,7 +439,7 @@ nonVoidableType
     / "(" __ t:type __ ")" { return t }
 
 traitIntersection
-    = hd:namedType tl:(__ "&" __ t:namedType { return t })* {
+    = hd:specializeType tl:(__ "&" __ t:specializeType { return t })* {
         if (tl.length > 0)
             return tree.leaf(tree.TRAIT_INTER, { traits: [hd].concat(tl) }, error)
         else
@@ -442,13 +449,6 @@ traitIntersection
 listType = "[" __ elementType:type __ "]" { return tree.leaf(tree.LIST_TYPE, { type: elementType }, error) }
 linkedListType = "::" _ elementType:type { return tree.leaf(tree.LINKED_LIST_TYPE, { type: elementType }, error) }
 
-enumType
-    = isAsync:isAsync "enum" elementType:(_ "->" __ t:recordMerge { return t })?
-        { return tree.leaf(tree.ENUM_TYPE, {
-            isAsync,
-            elementType: elementType ?? "any"
-        }, error) }
-
 setType = "set" _ "{" __ elementType:type __ "}" { return tree.leaf(tree.SET_TYPE, { type: elementType }, error) }
 
 dictType
@@ -456,14 +456,13 @@ dictType
         { return tree.leaf(tree.DICT_TYPE, { key, value }, error) }
 
 namedRecType
-    = name:id genericParams:genericParams _ "{|" __
+    = type:specializeType _ "{|" __
     hd:namedRecMemberType tl:((_ "," __ / eol) m:namedRecMemberType { return m })*
     close:(__ "|}")? {
         if (!close)
             error("Expecting \"|\x7d\" to close the record type")
         return tree.leaf(tree.REC_TYPE, {
-            name,
-            genericParams,
+            type,
             members: [hd].concat(tl)
         }, error)
     }
@@ -475,7 +474,7 @@ namedRecMemberType
     / constructor
 
 namedRecInheritance
-    = "..." parent:namedType { return tree.leaf(tree.INHERITANCE, { parent }, error) }
+    = "..." parent:specializeType { return tree.leaf(tree.INHERITANCE, { parent }, error) }
 
 namedRecFieldType
     = modifier:namedRecFieldTypeModifier? names:(_ i:identifiers { return i }) type:(_ t:type { return t })?
@@ -495,8 +494,7 @@ anonymousRecType
         if (!close)
             error("Expecting \"|\x7d\" to close the record type")
         return tree.leaf(tree.REC_TYPE, {
-            name: null,
-            genericParams: [],
+            typoe: null,
             members: [hd].concat(tl)
         }, error)
     }
@@ -560,7 +558,6 @@ lambda
         { return tree.leaf(tree.INLINE_ENUM, {
             isAsync,
             purity,
-            kind: "enum",
             body: body,
             returnType: returnType ?? "any"
         }, error) }
@@ -587,15 +584,14 @@ constructorBody
 
 voidType = void { return tree.leaf(tree.VOID_TYPE, {}, error) }
 
-namedType = base:valueByName params:genericOrSpecializeParams? {
-        if (params)
-            return tree.leaf(tree.SPECIALIZE_TYPE, { base, params }, error)
+specializeType
+    = hd:(genericParamType / valueByName) tl:(_ "-" __ t:(genericParamType / valueByName))* {
+        let types = [hd].concat(tl)
+        if (types.length > 1)
+            return tree.leaf(tree.SPECIALIZE_TYPE, { base: types.pop(), params: types }, error)
         else
-            return base
+            return hd
     }
-genericOrSpecializeParams
-    = _ "of" __ hd:(genericParamType / valueByName) tl:(_ "/" __ t:(genericParamType / valueByName) { return t })*
-        { return [hd].concat(tl) }
 
 genericParamType = "@" id:id { return tree.leaf(tree.GENERIC_PARAM_TYPE, { name: id }, error) }
 anyType = "any" { return tree.leaf(tree.ANY_TYPE, {}, error) }
@@ -759,7 +755,7 @@ nestedCall
     }
 
 appendCall
-    = _ fun:(multiplication / "new") defer:(_ "defer")? params:rightParams?
+    = _ fun:multiplication defer:(_ "defer")? params:rightParams?
         { return tree.leaf(tree.CALL, { fun, defer: !!defer, params: params ?? [] }, error) }
 
 rightParams
@@ -878,7 +874,8 @@ atom
     / dictValue
     / float
     / string
-    / specializedType
+    / newRecord
+    / getMember
     / lambda
     / voidValue
     / boolean
@@ -910,7 +907,7 @@ tuple
         }
 
 recValue
-    = "{|" __ members:recMembers? close:(__  "|}")? {
+    = "{|" __ members:recMembers? close:(__  "|}") {
         if (!close) error("Expecting \"|\x7d\" to close the record")
         return tree.leaf(tree.REC_VALUE, { members: members ?? [] }, error)
     }
@@ -960,17 +957,9 @@ dictKeyValue
         { return tree.leaf(tree.DICT_KEY_VALUE, { key, value }, error) }
     / splat
 
-specializedType
-    = member:getMember params:specializeParams? {
-        if (params)
-            return tree.leaf(tree.SPECIALIZE_TYPE, { base: member, params }, error)
-        else
-            return member
-    }
-
-specializeParams
-    = _ "of" __ hd:valueByName tl:(_ "/" __ i:valueByName { return i })*
-        { return [hd].concat(tl) }
+newRecord
+    = "new" _ type:specializeType __ params:(recValue/tuple)
+        { return tree.leaf(tree.CREATE_OBJECT, { type, params }, error) }
 
 getMember
     = container:(valueByName / implicitParam / "me")
@@ -1037,7 +1026,7 @@ eol = ([ \t] / comment)* "\r"? "\n" __
 
 keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return" / "yield" / "state"
     / "new" / "const" / "init" / "base" / "prop" / "me" / "with"
-    / "type" / "of" / "any" / "enum" / "set" / "dict" / "yes" / "no" / "record" / "trait"
+    / "type" / "any" / "enum" / "set" / "dict" / "yes" / "no" / "record" / "trait"
     / "wise" / "else" / "while" / "iter" / "next" / "break" / "case" / "other" / "when" / "resume"
     / "in" / "or" / "xor" / "global" / "async" / "defer") ![A-Za-z0-9_]
 
@@ -1046,7 +1035,8 @@ colon = $(":" ![=:])
 
 pipe = $("|" !"}")
 logicOp = "or" / "xor" / $("&" !"=")
-comparisonOp = $("=" !">") / "!=" / $(">" ![>=<]) / ">=" / $("<" ![>|]) / "<=" / "in";
+comparisonOp = $("=" !">") / "!=" / $(">" ![>=<]) / ">=" / leftAngleBracket / "<=" / "in"
+leftAngleBracket = $("<" ![>|])
 concatOp = $("++" !"=")
 additiveOp = $(("+" / "-") !([=>] / ".."))
 multiplicativeOp = $(("*" / "/" / "%") !"=")

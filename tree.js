@@ -9,7 +9,7 @@ function check(tree, error)
     {
         case CONST_DEF:
         case VAR_DEF:
-            if (isVoid(tree.type))
+            if (isVoidType(tree.type))
                 error("Void type cannot be specified for constants and variables")
             if (isGenericParamType(tree.type))
                 error("Generic parameters cannot be used in constants and variables")
@@ -40,7 +40,7 @@ function checkFunction(node, error)
     if (isNodeOf(node, TUPLE))
         node.values.forEach(value => checkFunction(value, error))
 
-    if ([VOID_VALUE, STRING_VALUE, LIST, SET,
+    if ([VOID_VALUE, STRING_VALUE, LIST, SET, REC_VALUE,
          INTEGER, FLOAT, DICT_VALUE, BOOLEAN, LINKED_LIST].includes(node._))
         error(capitalFirst(leafName[node._]) + " cannot be used as a function")
 }
@@ -83,14 +83,14 @@ function isLeaf(tree)
     return tree !== null && typeof tree === 'object' && tree._
 }
 
-function isVoid(tree)
+function isVoidType(tree)
 {
-    return isNodeOf(tree, "void")
+    return isNodeOf(tree, VOID_TYPE)
 }
 
 function isGenericParamType(tree)
 {
-    return isNodeOf(tree, "genericParamType")
+    return isNodeOf(tree, GENERIC_PARAM_TYPE)
 }
 
 function isNodeOf(tree, kind)
@@ -130,7 +130,7 @@ const TAGGED_TYPE = "TAGGED_TYPE"
 const FUN_TYPE = "FUN_TYPE"
 const TUPLE_TYPE = "TUPLE_TYPE"
 const TUPLE_POWER_TYPE = "TUPLE_POWER_TYPE"
-const VOIDABLE_TYPE = "VOIDABLE_TYPE"
+const OPTION_TYPE = "OPTION_TYPE"
 const LIST_TYPE = "LIST_TYPE"
 const ENUM_TYPE = "ENUM_TYPE"
 const SET_TYPE = "SET_TYPE"
@@ -209,6 +209,7 @@ const SPECIALIZE_TYPE = "SPECIALIZE_TYPE"
 const WITH_EFFECT = "WITH_EFFECT"
 const TRAIT_INTER = "TRAIT_INTER"
 const TRAIT_DEF = "TRAIT_DEF"
+const CREATE_OBJECT = "CREATE_OBJECT"
 
 leafName = {
     MODULE: "module",
@@ -230,7 +231,7 @@ leafName = {
     FUN_TYPE: "function type",
     TUPLE_TYPE: "tuple type",
     TUPLE_POWER_TYPE: "tuple power type",
-    VOIDABLE_TYPE: "voidable type",
+    OPTION_TYPE: "option type",
     LIST_TYPE: "list type",
     ENUM_TYPE: "enumeration type",
     SET_TYPE: "set type",
@@ -308,13 +309,15 @@ leafName = {
     SPECIALIZE_TYPE: "type specialization",
     WITH_EFFECT: "expression with effect",
     TRAIT_INTER: "trait intersection",
-    TRAIT_DEF: "trait definition"
+    TRAIT_DEF: "trait definition",
+    CREATE_OBJECT: "object creation"
 }
 
 module.exports = {
     leaf,
     getLambdaVariables,
     isNodeOf,
+    isVoidType,
     MODULE,
     CONST_DEF,
     VAR_DEF,
@@ -334,7 +337,7 @@ module.exports = {
     FUN_TYPE,
     TUPLE_TYPE,
     TUPLE_POWER_TYPE,
-    VOIDABLE_TYPE,
+    OPTION_TYPE,
     LIST_TYPE,
     ENUM_TYPE,
     SET_TYPE,
@@ -412,5 +415,6 @@ module.exports = {
     SPECIALIZE_TYPE,
     WITH_EFFECT,
     TRAIT_INTER,
-    TRAIT_DEF
+    TRAIT_DEF,
+    CREATE_OBJECT
 };
