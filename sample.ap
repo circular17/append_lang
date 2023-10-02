@@ -2,10 +2,10 @@
 var a/b = 5e10; c int = () ?? 7; d int
 var number int | float | decimal = 5.4
 var point #vec float*float = #vec (12.5, 8)
-type TaggedPoint = #point {| x float, y float |}
-var pointStruct TaggedPoint = {| x: 3, y: 45.4 |}
-global fun p1 TaggedPoint "+" p2 TaggedPoint
-    => #point {| x: p1.x + p2.x, y: p1.y + p2.y |}
+record @T-Point {| x T, y T |}
+var pointStruct float-Point = {| x: 3, y: 45.4 |}
+global fun p1 @T-Point "+" p2 @T-Point
+    => new T-Point {| x: p1.x + p2.x, y: p1.y + p2.y |}
 let {| x: myX, y: myY, coords: (a, b, c) |} = pointStruct
 var {| x, y |} = pointStruct <| x: 4
 let xOnly = pointStruct <| !y
