@@ -87,14 +87,20 @@ explicitModuleBlock
         { return tree.leaf(tree.CODE_BLOCK, { statements: s, when }, error) }
 
 when
-    = "when" (eol _ "|"? _ / __) c:caseBody { return c }
+    = "when" (eol _ pipe? _ / __) c:caseBody { return c }
 
 /************* FUNCTION DEFINITION *************/
 
 fun
+    = f:funHeader _ body:funBody {
+        f.body = body
+        return f
+    }
+
+funHeader
     = isGlobal:isGlobal isAsync:isAsync purity:purity
-    kind:funKind _ hd:funParam __ "\"" keywordName:$(keyword?) name:(id / overridableOp)? "\"" _
-    tl:(__ p:params { return p })? _ returnType:(colon __ t:type { return t })? _ body:funBody {
+    kind:funKind _ hd:funParam __ "\"" keywordName:$(keyword?) name:(id / overridableOp)? "\""
+    tl:(__ p:params { return p })? returnType:(_ colon __ t:type { return t })? {
         if (keywordName)
             error(`The keyword '${keywordName}' cannot be used as an identifier`)
         if (!name)
@@ -106,7 +112,6 @@ fun
             kind,
             name,
             params: [hd].concat(tl ?? []),
-            body,
             returnType
         }, error)
     }
@@ -120,7 +125,7 @@ isAsync
     / "" { return false }
 
 funParam
-    = mut:("mut" _)? names:identifiers _ type:type?
+    = mut:("mut" _)? names:identifiers type:(_ t:type { return t })?
         { return tree.leaf(tree.FUN_PARAM_DEF, { names, type, mutable: !!mut }, error) }
     / void
         { return tree.leaf(tree.FUN_PARAM_DEF, {
@@ -144,6 +149,7 @@ funBody
     / __ "=>" _ "?" { return null }
     / __ explicitFunBlock
     / case
+    / keyword { error("Unexpected keyword") }
 
 explicitFunBlock
     = "do" __ s:funStatements __ when:when? __ "end"
@@ -213,7 +219,7 @@ ternary
     = __ "?" __ ifTrue:(branch / inlineBlock / return) ifFalse:(__ "else" __ v:(branch / inlineBlock / return) { return v })?
         { return tree.leaf(tree.TERNARY, { ifTrue, ifFalse }, error) }
 case
-    = _ ("case" __ "|"? _ / eol _ "|" _) c:caseBody { return c }
+    = _ ("case" __ pipe? _ / eol _ pipe _) c:caseBody { return c }
 
 inlineBlock
     = "{" !(([-+&*^] / [><] "="? / "!=") "}") __ statements:funStatements __ "}"
@@ -222,7 +228,7 @@ inlineBlock
 /************* PATTERN MATCHING *************/
 
 caseBody
-    = hd:caseOption tl:(__ "|" _ o:caseOption { return o })*
+    = hd:caseOption tl:(__ pipe _ o:caseOption { return o })*
     otherValue:(__ "other" __ value:(branch / inlineBlock / return) { return value })? {
         var options = [hd].concat(tl)
         if (otherValue)
@@ -272,8 +278,8 @@ comparisonPattern
     = operator:(">" / ">=" / $("<" ![>|]) / "<=" / "in") _ value:aboveComparison
 
 tuplePattern
-    = "(" startEllipsis:(_ "...")? __ hd:pattern tl:(_ "," __ v:pattern { return v })* __
-    endEllipsis:("..." _)? close:")"? {
+    = "(" startEllipsis:(_ "...")? __ hd:pattern tl:(_ "," __ v:pattern { return v })*
+    endEllipsis:(_ "..." _)? close:(__ ")")? {
         if (!close) {
             if (tl.length > 0)
                 error("Expecting \")\" to close the tuple")
@@ -288,8 +294,8 @@ tuplePattern
 recPattern
     = "{|" _ ellipsis:("..." _)? "|}"
         { return tree.leaf(tree.REC_VALUE, { members: [], ellipsis: !!ellipsis }, error) }
-    / "{|" __ hd:recMemberPattern tl:(_ "," __ m:recMemberPattern { return m })* __
-    ellipsis:("..." _)? close:"|}"? {
+    / "{|" __ hd:recMemberPattern tl:(_ "," __ m:recMemberPattern { return m })*
+    ellipsis:(_ "..." _)? close:(__ "|}")? {
         if (!close) error("Expecting \"|\x7d\" to close the record")
         return tree.leaf(tree.REC_VALUE, { members: [hd].concat(tl), ellipsis: !!ellipsis }, error)
     }
@@ -303,7 +309,7 @@ listPattern
         { return tree.leaf(tree.LIST, { values: [], startEllipsis: false, endEllipsis: !!ellipsis }, error) }
 
     / "[" startEllipsis:(_ "...")? _ hd:pattern tl:(_ "," __ v:pattern { return v })*
-    __ endEllipsis:("..." _)? close:"]"? {
+    endEllipsis:(_ "..." _)? close:(__ "]")? {
         if (!close) error("Expecting \"]\" to close the list")
         return tl.length > 0
             ? tree.leaf(tree.LIST, { values: [hd].concat(tl), startEllipsis: !!startEllipsis, endEllipsis: !!endEllipsis }, error)
@@ -348,7 +354,7 @@ capture
 type = unionType
 
 unionType
-    = hd:taggedType tl:(_ "|" __ t:taggedType { return t })* {
+    = hd:taggedType tl:(_ pipe __ t:taggedType { return t })* {
         return tl.length > 0
             ? tree.leaf(tree.UNION_TYPE, { params: [hd].concat(tl) }, error)
             : hd }
@@ -441,7 +447,7 @@ namedRecInheritance
     = "..." parent:namedType { return tree.leaf(tree.INHERITANCE, { parent }, error) }
 
 namedRecFieldType
-    = modifier:namedRecFieldTypeModifier? _ names:identifiers _ type:type?
+    = modifier:namedRecFieldTypeModifier? names:(_ i:identifiers { return i }) type:(_ t:type { return t })?
     defaultValue:(_ ":" __ value:valueExpr { return value })? {
         if (!type && !defaultValue)
             error("The type or the value of the member must be specified")
@@ -525,7 +531,7 @@ lambdaBody
     / case
 
 constructor
-    = isAsync:isAsync "new" returnType:(_ "|" _ t:type { return t })? body:constructorBody
+    = isAsync:isAsync "new" returnType:(_ pipe _ t:type { return t })? body:constructorBody
         { return tree.leaf(tree.FUN_DEF, {
             isAsync,
             kind: "fun",
@@ -851,7 +857,7 @@ tuple
         }
 
 recValue
-    = "{|" __ members:recMembers? __ close:"|}"? {
+    = "{|" __ members:recMembers? close:(__  "|}")? {
         if (!close) error("Expecting \"|\x7d\" to close the record")
         return tree.leaf(tree.REC_VALUE, { members: members ?? [] }, error)
     }
@@ -872,7 +878,7 @@ splat
     = "..." value:valueByName
         { return tree.leaf(tree.SPLAT, { value }, error) }
 
-list = "[" _ elements:listElements? _ close:"]"? {
+list = "[" _ elements:listElements? close:(_ "]")? {
         if (!close) error("Expecting \"]\" to close the list")
         return tree.leaf(tree.LIST, { values: elements ?? [] }, error)
     }
@@ -880,7 +886,7 @@ listElements
     = __ hd:(splat / branch) tl:(_ "," __ v:(splat / branch) { return v })* __
         { return [hd].concat(tl) }
 
-set = "set" _ "{" _ elements:setElements? _ close:"}"? {
+set = "set" _ "{" _ elements:setElements? close:(_ "}")? {
         if (!close) error("Expecting \"\x7d\" to close the set")
         return tree.leaf(tree.SET, { values: elements ?? [] }, error)
     }
@@ -985,6 +991,7 @@ keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return" / "yi
 assignmentOp = ":=" / "*=" / "/=" / "%=" / "+=" / "-=" / "++="
 colon = $(":" ![=:])
 
+pipe = $("|" !"}")
 logicOp = "or" / "xor" / $("&" !"=")
 comparisonOp = $("=" !">") / "!=" / $(">" ![>=<]) / ">=" / $("<" ![>|]) / "<=" / "in";
 concatOp = $("++" !"=")
