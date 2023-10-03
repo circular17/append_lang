@@ -139,7 +139,7 @@ end
 }
 
 // iterating
-0 ..< 10 each :j {
+0 ..< 10 by 2 each :j {
     "j = {j}" print
 }
 
@@ -360,14 +360,14 @@ iter () myEnum.fetch
 () myEnum.close
 
 // Range from low to high excluded
-fun low @T "..<" high @T: @T-Enum =>
+fun low @T "..<" high @T; step: @T-Enum =>
   {|
     var _current T: low
     _high T: high
     state fun () "fetch" =>
       me._current < me._high ? {
         let result = _current
-        _current += 1 // type T only need to handle "+ 1" and "<"
+        _current += step // type T only need to handle "+ step" and "<"
         #ok result
       } else #done
     state fun value "has" =>

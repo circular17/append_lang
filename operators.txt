@@ -2,8 +2,7 @@ To do :
 -------
 - reg ex (~ ?)
 - dot product (** ?)
-- range step
-- like type
+- like type: maybe redundant with traits
 
 Whitespace
 ----------

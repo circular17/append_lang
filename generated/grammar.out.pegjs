@@ -811,9 +811,9 @@ cartesianPower
     }
 
 range
-    = first:multiplication to:(_ op:rangeOp __ lastOrCount:multiplication)? {
+    = first:multiplication to:(_ op:rangeOp __ lastOrCount:multiplication step:(_ "by" __ s:multiplication { return s })?)? {
         if (to)
-            return tree.leaf(tree.RANGE, { first, lastOrCount: to.lastOrCount, op: to.op }, error)
+            return tree.leaf(tree.RANGE, { first, lastOrCount: to.lastOrCount, op: to.op, step: to.step }, error)
         else
             return first
     }
@@ -1028,7 +1028,7 @@ keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return" / "yi
     / "new" / "const" / "init" / "base" / "prop" / "me" / "with"
     / "type" / "any" / "enum" / "set" / "dict" / "yes" / "no" / "record" / "trait"
     / "wise" / "else" / "while" / "iter" / "next" / "break" / "case" / "other" / "when" / "resume"
-    / "in" / "or" / "xor" / "global" / "async" / "defer") ![A-Za-z0-9_]
+    / "in" / "by" / "or" / "xor" / "global" / "async" / "defer") ![A-Za-z0-9_]
 
 assignmentOp = ":=" / "*=" / "/=" / "%=" / "+=" / "-=" / "++="
 colon = $(":" ![=:])
