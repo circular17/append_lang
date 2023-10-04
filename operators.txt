@@ -73,12 +73,16 @@ Composite
  ?      voidable type (OR ternary expression)
  |      union type (OR case)
  ...    splat operator of enumerable (OR match any number of elements)
+ -      generic parameter
 
 Ranges
 ------
- ..=  inclusive range
- ..<  exclusive range
- +..  range by length
+ ..=   inclusive range
+ ..>=  inclusive range descending
+ ..<   exclusive range
+ ..>   exclusive range descending
+ +..   range by length
+ -..   range by length descending
 
 Functions
 ---------
