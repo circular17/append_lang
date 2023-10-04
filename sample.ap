@@ -1,11 +1,13 @@
 // "append" language examples
 var a/b = 5e10; c int = () ?? 7; d int
 var number int | float | decimal = 5.4
-var point #vec float*float = #vec (12.5, 8)
-record @T-Point {| x T, y T |}
-var pointStruct float-Point = {| x: 3, y: 45.4 |}
-global fun p1 @T-Point "+" p2 @T-Point
-    => new T-Point {| x: p1.x + p2.x, y: p1.y + p2.y |}
+type vec2 float*float
+var point = #vec2 (12.5, 8)
+type T-point {| x T, y T |}
+type T-point3 {| ...T-point, z T |}
+var pointStruct = #float-point {| x: 3, y: 45.4 |}
+global fun p1 @T-point "+" p2 @T-point
+    => #T-point {| x: p1.x + p2.x, y: p1.y + p2.y |}
 let {| x: myX, y: myY, coords: (a, b, c) |} = pointStruct
 var {| x, y |} = pointStruct <| x: 4
 let xOnly = pointStruct <| !y
@@ -13,6 +15,8 @@ pointStruct.y := 6
 let problematic str = "this {a}"
 var anything any = "hello"   // this will be inferred
 var functionVar int->int->int = => $x + $y
+alias handle = int
+var windowHandle handle = 0
 
 trait Concatenable { // "Self" is the type for which the trait is checked
     fun left Self "++" right Self: Self
@@ -26,6 +30,11 @@ trait StringLike {
     ...Concatenable,
     fun a Self "substring" from int; to int: Self
 }
+
+type done () // indicate success of operation
+type none () // indicate absence of value
+type T-ok T // indicate success with result
+type T-err T // indicate error
 
 // the following function only works on types that are both concatenable and countable
 fun a Concatenable & Countable "*" count int do
@@ -42,7 +51,7 @@ end
 sub toDiscard "drop" => ()
 
 // function "someStuff" without parameters, return void or an error
-fun () "someStuff": #done | #err any do
+fun () "someStuff": done | any-err do
     () someOperation
     mut a add "world"
     a[5] := "hello"
@@ -92,9 +101,9 @@ mut setOfStr del "four"
 | #done -> "four deleted" print
 | #none -> "four not found" print
 
-var dictionary #lookup dict{int -> str} = dict{5 -> "five", 7 -> "seven"}
+var dictionary dict{int -> str}-lookup = dict{5 -> "five", 7 -> "seven"}
 let ZERO = 0. let ONE int = 1
-type circleF = #circle float
+type T-circle T
 let h = f >> g
 let multi = 2 add 3 squared; 4 cubed
 //let piped = 2 add 3 \ squared
@@ -213,7 +222,7 @@ fun list [[@T]] "flat": [@T] =>
 
 var _localeCount = 0 // private static variable of module
 
-record Locale {|
+type Locale {|
     const identifier str? // voidable and readonly because not var
     tag any?: #none // freely accessible, need to copy the array to modify, with default value
 
@@ -225,7 +234,7 @@ record Locale {|
         => _positive
         set => $v >= 0 ? _positive := $v
 
-    new | #err str
+    new | err str
         // identifier will need to be set in initialization record expression
         _instance := new JS--Intl--Locale (identifier ?? "")
         _localeCount += 1
@@ -237,10 +246,10 @@ fun locale Locale "showInfo" do
     "This locale is identified by: {locale.identifier}" print
 end
 
-let defaultLocale = new Locale {| identifier: #none |} // tag has default value
+let defaultLocale = #locale {| identifier: #none |} // tag has default value
 
-record FrenchLocale {|
-    ...Locale,
+type frenchLocale {|
+    ...locale,
     base identifier = "fr-FR"
     var croissants int
     new
@@ -249,7 +258,7 @@ record FrenchLocale {|
 |}
 
 // replace function for specific locale
-fun locale FrenchLocale "showInfo" do
+fun locale frenchLocale "showInfo" do
     locale wise {
         "This locale is identified by: {.identifier}" print
         "There are {.croissants} croissants" print
@@ -266,8 +275,8 @@ async sub urls "gatherData" =>
 // async implicit await
 let entries = "phonebook.txt" readFile
 
-record @T-Enum {| state fun () "fetch": T? => ? |}
-record @T-AsyncEnum {| async state fun () "fetch": T? => ? |}
+type T-enum {| state fun () "fetch": T? => ? |}
+type T-asyncEnum {| async state fun () "fetch": T? => ? |}
 
 enum n int "getNumbersSeq": int do
     var i int = 0
@@ -277,26 +286,27 @@ enum n int "getNumbersSeq": int do
     }
 end
 
-let numbersEnum int-Enum = enum: int {
+let numbersEnum int-enum = enum: int {
     yield 1
     yield 2
     yield 3
     yield 4
 }
 
-fun lst @T-Enum "tally": dict{@T -> int} do
+fun lst @T-enum "tally": dict{@T -> int} do
     var counts dict{T -> int} = dict{}
     lst each :x => counts[x] = (counts[x] ?? 0) + 1 // supposing that ?? can be applied to (#ok T | #none)
     counts
 end
 
-fun lst @T-Enum "each" action @T->any: #done | any do
+fun lst @T-enum "each" action @T->any: done | any-err do
     iter () lst.fetch // could be implicit await, could be io
     | #done -> break
     | #ok @item -> {
         item action
         | #done, #ok @subItem -> next
-        | @subError -> return error
+        | #err @subError -> return subError
+        | @unknown -> return #err unknown
     }
     | @error -> return error
     #done
@@ -308,18 +318,18 @@ fun keys set{@T} "associate" f @T->@U : dict{@T -> @U} do
     result
 end
 
-fun ab @T-Enum^2 "tally": dict{@T -> int*int} do
+fun ab @T-enum^2 "tally": dict{@T -> int*int} do
     let (aCounts, bCounts) = ab each tally
     let allKeys = aCounts.keys {+} bCounts.keys
     allKeys associate :k => (aCounts[k] ?? 0, bCounts[k] ?? 0)
 end
 
-fun a @T-Enum "listUnion" b @T-Enum: [@T] do
+fun a @T-enum "listUnion" b @T-enum: [@T] do
     (a, b) tally \ flatMap :k T; v int*int
         => [k] * (v max)
 end
 
-fun a @T-Enum "listDiff" b @T-Enum: [@T] do
+fun a @T-enum "listDiff" b @T-enum: [@T] do
     let aCounts = a tally
     let bCounts = b tally
 
@@ -327,7 +337,7 @@ fun a @T-Enum "listDiff" b @T-Enum: [@T] do
         [k] * ((v - (bCounts[k] ?? 0), 0) max)
 end
 
-fun a @T-Enum "listInter" b @T-Enum: [@T] do
+fun a @T-enum "listInter" b @T-enum: [@T] do
     let aCounts = a tally
     let bCounts = b tally
 
@@ -341,7 +351,7 @@ state fun () "counter": int do
 end
 
 fun n @T "getNumbersEnum" =>
-  new T-Enum {|
+  #T-enum {|
     var _current T: 0
     _last T: n
     state fun () "fetch" =>
@@ -353,14 +363,14 @@ fun n @T "getNumbersEnum" =>
     state fun () "close" => ()
   |}
 
-var myEnum int-Enum = 5 getNumbersEnum
+var myEnum int-enum = 5 getNumbersEnum
 iter () myEnum.fetch
     | #ok @i -> { "Number {i}" print. next }
     other break
 () myEnum.close
 
 // Range from low to high excluded
-fun low @T "..<" high @T; step: @T-Enum =>
+fun low @T "..<" high @T; step: @T-enum =>
   {|
     var _current T: low
     _high T: high

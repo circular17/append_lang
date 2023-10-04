@@ -16,7 +16,6 @@ statement
     = defs
     / vars
     / typeDefs
-    / recordDef
     / fun
     / branch
 
@@ -70,6 +69,8 @@ typeDefs // []
             name,
             features
         }, error) }
+    / "alias" _ hd:aliasDef tl:(_ ";" __ t:aliasDef { return t })*
+        { return [hd].concat(tl) }
 
 features
     = hd:feature tl:((_ "," __ / eol) f:feature { return f })*
@@ -84,20 +85,23 @@ traitInheritance
     = "..." parent:getMember { return tree.leaf(tree.INHERITANCE, { parent }, error) }
 
 typeDef
-    = _ genericParams:genericParams _ name:id _ "=" _ type:type
+    = _ genericParams:genericParams _ name:typeId _ type:type
         { return tree.leaf(tree.TYPE_DEF, {
             name,
-            genericParams: genericParams,
+            genericParams,
             type
         }, error) }
 
 genericParams
-    = "@" hd:id tl:(_ "-" __ "@" i:id { return i })*
-        { return [hd].concat(tl) }
-    / "" { return [] }
+    = (i:typeId _ "-" { return i })*
 
-recordDef
-    = "record" _ n:namedRecType { return n }
+aliasDef
+    = _ genericParams:genericParams _ name:typeId _ "=" _ type:type
+        { return tree.leaf(tree.ALIAS_DEF, {
+            name,
+            genericParams,
+            type
+        }, error) }
 
 explicitModuleBlock
     = "do" effects:effects? __ s:moduleStatements __ when:when? __ "end"
@@ -372,7 +376,7 @@ capture
 type = unionType
 
 unionType
-    = hd:taggedType tl:(_ pipe __ t:taggedType { return t })* {
+    = hd:functionType tl:(_ pipe __ t:functionType { return t })* {
         if (tl.length > 0) {
             const types = [hd].concat(tl)
             if (types.some(t => tree.isVoidType(t)))
@@ -382,14 +386,6 @@ unionType
         else
             return hd
     }
-
-taggedType
-    = tag:tag type:(_ t:taggedType { return t })?
-        { return tree.leaf(tree.TAGGED_TYPE, {
-            tag,
-            type: type ?? tree.leaf(tree.VOID_TYPE, { }, error)
-        }, error) }
-    / functionType
 
 functionType
     = isAsync:isAsync purity:purity hd:voidTypeOrNot tl:(_ "->" __ t:voidTypeOrNot { return t })* {
@@ -403,12 +399,12 @@ functionType
 
 voidTypeOrNot
     = voidType
-    / recordMerge
+    / concatType
 
-recordMerge
+concatType
     = hd:tupleType tl:(_ "++" __ tupleType)* {
         return tl.length > 0
-            ? tree.leaf(tree.RECORD_MERGE, { records: [hd].concat(tl) }, error)
+            ? tree.leaf(tree.CONCAT_TYPE, { records: [hd].concat(tl) }, error)
             : hd
     }
 
@@ -423,20 +419,10 @@ tuplePowerType
             ? tree.leaf(tree.TUPLE_POWER_TYPE, { base, power }, error)
             : base }
 optionType
-    = atomic:atomicType isOption:"?"? {
+    = base:traitIntersection isOption:"?"? {
         return isOption
-            ? tree.leaf(tree.OPTION_TYPE, { type: atomic }, error)
-            : atomic }
-atomicType
-    = traitIntersection
-    / anyType
-    / listType
-    / linkedListType
-    / setType
-    / dictType
-    / anonymousRecType
-    / voidType
-    / "(" __ t:type __ ")" { return t }
+            ? tree.leaf(tree.OPTION_TYPE, { type: base }, error)
+            : base }
 
 traitIntersection
     = hd:specializeType tl:(__ "&" __ t:specializeType { return t })* {
@@ -445,6 +431,18 @@ traitIntersection
         else
             return hd
     }
+
+atomicType
+    = anyType
+    / listType
+    / linkedListType
+    / setType
+    / dictType
+    / recType
+    / voidType
+    / typeByName
+    / "(" __ t:type __ ")" { return t }
+    / "#" { error("Unexpected \"#\" in type expression") }
 
 listType = "[" __ elementType:type __ "]" { return tree.leaf(tree.LIST_TYPE, { type: elementType }, error) }
 linkedListType = "::" _ elementType:type { return tree.leaf(tree.LINKED_LIST_TYPE, { type: elementType }, error) }
@@ -455,29 +453,28 @@ dictType
     = "dict" _ "{" __ key:tupleType _ "->" __ value:tupleType __ "}"
         { return tree.leaf(tree.DICT_TYPE, { key, value }, error) }
 
-namedRecType
-    = type:specializeType _ "{|" __
-    hd:namedRecMemberType tl:((_ "," __ / eol) m:namedRecMemberType { return m })*
+recType
+    = "{|" __
+    hd:recMemberType tl:((_ "," __ / eol) m:recMemberType { return m })*
     close:(__ "|}")? {
         if (!close)
             error("Expecting \"|\x7d\" to close the record type")
         return tree.leaf(tree.REC_TYPE, {
-            type,
             members: [hd].concat(tl)
         }, error)
     }
-namedRecMemberType
-    = namedRecInheritance
-    / namedRecFieldType
+recMemberType
+    = recInheritance
+    / recFieldType
     / propDef
     / fun
     / constructor
 
-namedRecInheritance
+recInheritance
     = "..." parent:specializeType { return tree.leaf(tree.INHERITANCE, { parent }, error) }
 
-namedRecFieldType
-    = modifier:namedRecFieldTypeModifier? names:(_ i:identifiers { return i }) type:(_ t:type { return t })?
+recFieldType
+    = modifier:recFieldTypeModifier? names:(_ i:identifiers { return i }) type:(_ t:type { return t })?
     defaultValue:(_ ":" __ value:valueExpr { return value })? {
         if (!type && !defaultValue)
             error("The type or the value of the member must be specified")
@@ -485,33 +482,8 @@ namedRecFieldType
     }
     / modifier:"base" _ names:identifiers _ "=" __ defaultValue:valueExpr
         { return tree.leaf(tree.REC_MEMBER_TYPE, { modifier, names, defaultValue }, error) }
-namedRecFieldTypeModifier
+recFieldTypeModifier
     = "const" / "init" / "var"
-
-anonymousRecType
-    = "{|" __ hd:anonymousRecMemberType tl:((_ "," __ / eol) m:anonymousRecMemberType { return m })*
-    close:(__ "|}")? {
-        if (!close)
-            error("Expecting \"|\x7d\" to close the record type")
-        return tree.leaf(tree.REC_TYPE, {
-            typoe: null,
-            members: [hd].concat(tl)
-        }, error)
-    }
-anonymousRecMemberType
-    = anonymousRecFieldType
-    / propDef
-    / fun
-
-anonymousRecFieldType
-    = modifier:anonymousRecFieldTypeModifier? _ names:identifiers _ type:type?
-    defaultValue:(_ ":" __ value:valueExpr { return value })? {
-        if (!type && !defaultValue)
-            error("The type or the value of the member must be specified")
-        return tree.leaf(tree.REC_MEMBER_TYPE, { modifier, names, type, defaultValue }, error)
-    }
-anonymousRecFieldTypeModifier
-    = "const" / "var"
 
 propDef
     = p:propHeader getter:getterBody setter:setter? {
@@ -585,7 +557,7 @@ constructorBody
 voidType = void { return tree.leaf(tree.VOID_TYPE, {}, error) }
 
 specializeType
-    = hd:(genericParamType / valueByName) tl:(_ "-" __ t:(genericParamType / valueByName))* {
+    = hd:(genericParamType / atomicType) tl:(_ "-" __ t:(genericParamType / atomicType))* {
         let types = [hd].concat(tl)
         if (types.length > 1)
             return tree.leaf(tree.SPECIALIZE_TYPE, { base: types.pop(), params: types }, error)
@@ -874,7 +846,7 @@ atom
     / dictValue
     / float
     / string
-    / newRecord
+    / newObject
     / getMember
     / lambda
     / voidValue
@@ -957,12 +929,12 @@ dictKeyValue
         { return tree.leaf(tree.DICT_KEY_VALUE, { key, value }, error) }
     / splat
 
-newRecord
-    = "new" _ type:specializeType __ params:(recValue/tuple)
+newObject
+    = "new" _ type:specializeType __ params:tuple
         { return tree.leaf(tree.CREATE_OBJECT, { type, params }, error) }
 
 getMember
-    = container:(valueByName / implicitParam / "me")
+    = container:(valueByName / implicitParam)
     path:("." id:id { return id })* {
         if (path.length > 0)
             return tree.leaf(tree.GET_MEMBER, { container, path }, error)
@@ -981,9 +953,23 @@ valueByName
     }
     / "me"
 
+typeByName
+    = hd:typeId tl:("--" id:typeId { return id })* {
+        let ids = [hd].concat(tl)
+        const name = ids.pop()
+        return tree.leaf(tree.TYPE_BY_NAME, { name, namespace: ids }, error)
+    }
+
+typeId
+    = id
+    / "enum"
+
 boolean
     = value:("yes" / "no")
         { return tree.leaf(tree.BOOLEAN, { value: value === "yes" }, error) }
+
+tag
+    = "#" specializeType
 
 /************* TOKENS *************/
 
@@ -992,9 +978,6 @@ identifiers
         { return [hd].concat(tl) }
 
 id = $(!keyword "_"? [A-Za-z] [A-Za-z0-9_]*)
-
-tag
-    = $("#" "_"? [A-Za-z] [A-Za-z0-9_]*)
 
 integer = [0-9] [0-9_]* ([eE] "+"? [0-9]+)?
     { return tree.leaf(tree.INTEGER, { value: BigInt(text()) }, error) }
@@ -1026,7 +1009,7 @@ eol = ([ \t] / comment)* "\r"? "\n" __
 
 keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return" / "yield" / "state"
     / "new" / "const" / "init" / "base" / "prop" / "me" / "with"
-    / "type" / "any" / "enum" / "set" / "dict" / "yes" / "no" / "record" / "trait"
+    / "type" / "any" / "enum" / "set" / "dict" / "yes" / "no" / "trait" / "alias"
     / "wise" / "else" / "while" / "iter" / "next" / "break" / "case" / "other" / "when" / "resume"
     / "in" / "by" / "or" / "xor" / "global" / "async" / "defer") ![A-Za-z0-9_]
 

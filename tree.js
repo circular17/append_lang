@@ -16,6 +16,7 @@ function check(tree, error)
             break;
 
         case TYPE_DEF:
+        case ALIAS_DEF:
             if (isGenericParamType(tree.type))
                 error("Generic parameters cannot be used in type definitions")
             break;
@@ -125,8 +126,8 @@ const FUN_PARAM_DEF = "FUN_PARAM_DEF"
 const VOID_TYPE = "VOID_TYPE"
 const CODE_BLOCK = "CODE_BLOCK"
 const TYPE_DEF = "TYPE_DEF"
+const ALIAS_DEF = "ALIAS_DEF"
 const UNION_TYPE = "UNION_TYPE"
-const TAGGED_TYPE = "TAGGED_TYPE"
 const FUN_TYPE = "FUN_TYPE"
 const TUPLE_TYPE = "TUPLE_TYPE"
 const TUPLE_POWER_TYPE = "TUPLE_POWER_TYPE"
@@ -154,6 +155,7 @@ const NOT = "NOT"
 const EXPONENTIATION = "EXPONENTIATION"
 const INDEXING = "INDEXING"
 const VALUE_BY_NAME = "VALUE_BY_NAME"
+const TYPE_BY_NAME = "TYPE_BY_NAME"
 const TUPLE = "TUPLE"
 const REC_VALUE = "REC_VALUE"
 const REC_MEMBER_VALUE = "REC_MEMBER_VALUE"
@@ -198,7 +200,7 @@ const GET_WISE_MEMBER = "GET_WITH_MEMBER"
 const CARTESIAN_PROD = "CARTESIAN_PROD"
 const CARTESIAN_POWER = "CARTESIAN_POWER"
 const PROP_DEF = "PROP_DEF"
-const RECORD_MERGE = "RECORD_MERGE"
+const CONCAT_TYPE = "CONCAT_TYPE"
 const INHERITANCE = "INHERITANCE"
 const SET_DIFF = "SET_DIFF"
 const SET_UNION = "SET_UNION"
@@ -226,8 +228,8 @@ leafName = {
     VOID_TYPE: "void type",
     CODE_BLOCK: "code block",
     TYPE_DEF: "type definition",
+    ALIAS_DEF: "type alias definition",
     UNION_TYPE: "union type",
-    TAGGED_TYPE: "tagged type",
     FUN_TYPE: "function type",
     TUPLE_TYPE: "tuple type",
     TUPLE_POWER_TYPE: "tuple power type",
@@ -256,6 +258,7 @@ leafName = {
     INDEXING: "indexing",
     COMPOSE: "composition",
     VALUE_BY_NAME: "value by name",
+    TYPE_BY_NAME: "type by name",
     TUPLE: "tuple",
     REC_VALUE: "record value",
     REC_MEMBER_VALUE: "record member value",
@@ -299,7 +302,7 @@ leafName = {
     CARTESIAN_PROD: "cartesian product",
     CARTESIAN_POWER: "cartesian power",
     PROP_DEF: "property definition",
-    RECORD_MERGE: "record merge",
+    CONCAT_TYPE: "type concatenation",
     INHERITANCE: "inheritance",
     SET_DIFF: "set difference",
     SET_UNION: "set union",
@@ -332,8 +335,8 @@ module.exports = {
     VOID_TYPE,
     CODE_BLOCK,
     TYPE_DEF,
+    ALIAS_DEF,
     UNION_TYPE,
-    TAGGED_TYPE,
     FUN_TYPE,
     TUPLE_TYPE,
     TUPLE_POWER_TYPE,
@@ -362,6 +365,7 @@ module.exports = {
     INDEXING,
     COMPOSE,
     VALUE_BY_NAME,
+    TYPE_BY_NAME,
     TUPLE,
     REC_VALUE,
     REC_MEMBER_VALUE,
@@ -405,7 +409,7 @@ module.exports = {
     CARTESIAN_PROD,
     CARTESIAN_POWER,
     PROP_DEF,
-    RECORD_MERGE,
+    CONCAT_TYPE,
     INHERITANCE,
     SET_DIFF,
     SET_UNION,

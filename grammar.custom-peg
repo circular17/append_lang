@@ -16,7 +16,6 @@ statement
     = defs
     / vars
     / typeDefs
-    / recordDef
     / fun
     / branch
 
@@ -70,6 +69,8 @@ typeDefs // []
             name,
             features
         }
+    / "alias" _ hd:aliasDef tl:(_ ";" __ t:aliasDef => t)*
+        => hd::tl
 
 features
     = hd:feature tl:((_ "," __ / eol) f:feature => f)*
@@ -84,20 +85,23 @@ traitInheritance
     = "..." parent:getMember => #INHERITANCE { parent }
 
 typeDef
-    = _ genericParams:genericParams _ name:id _ "=" _ type:type
+    = _ genericParams:genericParams _ name:typeId _ type:type
         => #TYPE_DEF {
             name,
-            genericParams: genericParams,
+            genericParams,
             type
         }
 
 genericParams
-    = "@" hd:id tl:(_ "-" __ "@" i:id => i)*
-        => hd::tl
-    / "" => []
+    = (i:typeId _ "-" => i)*
 
-recordDef
-    = "record" _ n:namedRecType => n
+aliasDef
+    = _ genericParams:genericParams _ name:typeId _ "=" _ type:type
+        => #ALIAS_DEF {
+            name,
+            genericParams,
+            type
+        }
 
 explicitModuleBlock
     = "do" effects:effects? __ s:moduleStatements __ when:when? __ "end"
@@ -372,7 +376,7 @@ capture
 type = unionType
 
 unionType
-    = hd:taggedType tl:(_ pipe __ t:taggedType => t)* {
+    = hd:functionType tl:(_ pipe __ t:functionType => t)* {
         if (tl.length > 0) {
             const types = hd::tl
             if (types.some(t => tree.isVoidType(t)))
@@ -382,14 +386,6 @@ unionType
         else
             return hd
     }
-
-taggedType
-    = tag:tag type:(_ t:taggedType => t)?
-        => #TAGGED_TYPE {
-            tag,
-            type: type ?? #VOID_TYPE { }
-        }
-    / functionType
 
 functionType
     = isAsync:isAsync purity:purity hd:voidTypeOrNot tl:(_ "->" __ t:voidTypeOrNot => t)* {
@@ -403,12 +399,12 @@ functionType
 
 voidTypeOrNot
     = voidType
-    / recordMerge
+    / concatType
 
-recordMerge
+concatType
     = hd:tupleType tl:(_ "++" __ tupleType)* {
         return tl.length > 0
-            ? #RECORD_MERGE { records: hd::tl }
+            ? #CONCAT_TYPE { records: hd::tl }
             : hd
     }
 
@@ -423,20 +419,10 @@ tuplePowerType
             ? #TUPLE_POWER_TYPE { base, power }
             : base }
 optionType
-    = atomic:atomicType isOption:"?"? {
+    = base:traitIntersection isOption:"?"? {
         return isOption
-            ? #OPTION_TYPE { type: atomic }
-            : atomic }
-atomicType
-    = traitIntersection
-    / anyType
-    / listType
-    / linkedListType
-    / setType
-    / dictType
-    / anonymousRecType
-    / voidType
-    / "(" __ t:type __ ")" => t
+            ? #OPTION_TYPE { type: base }
+            : base }
 
 traitIntersection
     = hd:specializeType tl:(__ "&" __ t:specializeType => t)* {
@@ -445,6 +431,18 @@ traitIntersection
         else
             return hd
     }
+
+atomicType
+    = anyType
+    / listType
+    / linkedListType
+    / setType
+    / dictType
+    / recType
+    / voidType
+    / typeByName
+    / "(" __ t:type __ ")" => t
+    / "#" => error("Unexpected \"#\" in type expression")
 
 listType = "[" __ elementType:type __ "]" => #LIST_TYPE { type: elementType }
 linkedListType = "::" _ elementType:type => #LINKED_LIST_TYPE { type: elementType }
@@ -455,29 +453,28 @@ dictType
     = "dict" _ "{" __ key:tupleType _ "->" __ value:tupleType __ "}"
         => #DICT_TYPE { key, value }
 
-namedRecType
-    = type:specializeType _ "{|" __
-    hd:namedRecMemberType tl:((_ "," __ / eol) m:namedRecMemberType => m)*
+recType
+    = "{|" __
+    hd:recMemberType tl:((_ "," __ / eol) m:recMemberType => m)*
     close:(__ "|}")? {
         if (!close)
             error("Expecting \"|\x7d\" to close the record type")
         return #REC_TYPE {
-            type,
             members: hd::tl
         }
     }
-namedRecMemberType
-    = namedRecInheritance
-    / namedRecFieldType
+recMemberType
+    = recInheritance
+    / recFieldType
     / propDef
     / fun
     / constructor
 
-namedRecInheritance
+recInheritance
     = "..." parent:specializeType => #INHERITANCE { parent }
 
-namedRecFieldType
-    = modifier:namedRecFieldTypeModifier? names:(_ i:identifiers => i) type:(_ t:type => t)?
+recFieldType
+    = modifier:recFieldTypeModifier? names:(_ i:identifiers => i) type:(_ t:type => t)?
     defaultValue:(_ ":" __ value:valueExpr => value)? {
         if (!type && !defaultValue)
             error("The type or the value of the member must be specified")
@@ -485,33 +482,8 @@ namedRecFieldType
     }
     / modifier:"base" _ names:identifiers _ "=" __ defaultValue:valueExpr
         => #REC_MEMBER_TYPE { modifier, names, defaultValue }
-namedRecFieldTypeModifier
+recFieldTypeModifier
     = "const" / "init" / "var"
-
-anonymousRecType
-    = "{|" __ hd:anonymousRecMemberType tl:((_ "," __ / eol) m:anonymousRecMemberType => m)*
-    close:(__ "|}")? {
-        if (!close)
-            error("Expecting \"|\x7d\" to close the record type")
-        return #REC_TYPE {
-            typoe: null,
-            members: hd::tl
-        }
-    }
-anonymousRecMemberType
-    = anonymousRecFieldType
-    / propDef
-    / fun
-
-anonymousRecFieldType
-    = modifier:anonymousRecFieldTypeModifier? _ names:identifiers _ type:type?
-    defaultValue:(_ ":" __ value:valueExpr => value)? {
-        if (!type && !defaultValue)
-            error("The type or the value of the member must be specified")
-        return #REC_MEMBER_TYPE { modifier, names, type, defaultValue }
-    }
-anonymousRecFieldTypeModifier
-    = "const" / "var"
 
 propDef
     = p:propHeader getter:getterBody setter:setter? {
@@ -585,7 +557,7 @@ constructorBody
 voidType = void => #VOID_TYPE {}
 
 specializeType
-    = hd:(genericParamType / valueByName) tl:(_ "-" __ t:(genericParamType / valueByName))* {
+    = hd:(genericParamType / atomicType) tl:(_ "-" __ t:(genericParamType / atomicType))* {
         let types = hd::tl
         if (types.length > 1)
             return #SPECIALIZE_TYPE { base: types.pop(), params: types }
@@ -874,7 +846,7 @@ atom
     / dictValue
     / float
     / string
-    / newRecord
+    / newObject
     / getMember
     / lambda
     / voidValue
@@ -957,12 +929,12 @@ dictKeyValue
         => #DICT_KEY_VALUE { key, value }
     / splat
 
-newRecord
-    = "new" _ type:specializeType __ params:(recValue/tuple)
+newObject
+    = "new" _ type:specializeType __ params:tuple
         => #CREATE_OBJECT { type, params }
 
 getMember
-    = container:(valueByName / implicitParam / "me")
+    = container:(valueByName / implicitParam)
     path:("." id:id => id)* {
         if (path.length > 0)
             return #GET_MEMBER { container, path }
@@ -981,9 +953,23 @@ valueByName
     }
     / "me"
 
+typeByName
+    = hd:typeId tl:("--" id:typeId => id)* {
+        let ids = hd::tl
+        const name = ids.pop()
+        return #TYPE_BY_NAME { name, namespace: ids }
+    }
+
+typeId
+    = id
+    / "enum"
+
 boolean
     = value:("yes" / "no")
         => #BOOLEAN { value: value === "yes" }
+
+tag
+    = "#" specializeType
 
 /************* TOKENS *************/
 
@@ -992,9 +978,6 @@ identifiers
         => hd::tl
 
 id = $(!keyword "_"? [A-Za-z] [A-Za-z0-9_]*)
-
-tag
-    = $("#" "_"? [A-Za-z] [A-Za-z0-9_]*)
 
 integer = [0-9] [0-9_]* ([eE] "+"? [0-9]+)?
     => #INTEGER { value: BigInt(text()) }
@@ -1026,7 +1009,7 @@ eol = ([ \t] / comment)* "\r"? "\n" __
 
 keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return" / "yield" / "state"
     / "new" / "const" / "init" / "base" / "prop" / "me" / "with"
-    / "type" / "any" / "enum" / "set" / "dict" / "yes" / "no" / "record" / "trait"
+    / "type" / "any" / "enum" / "set" / "dict" / "yes" / "no" / "trait" / "alias"
     / "wise" / "else" / "while" / "iter" / "next" / "break" / "case" / "other" / "when" / "resume"
     / "in" / "by" / "or" / "xor" / "global" / "async" / "defer") ![A-Za-z0-9_]
 
