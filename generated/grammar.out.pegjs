@@ -209,6 +209,8 @@ funStatement // [] or leaf
 return
     = "return" _ value:branch
         { return tree.leaf(tree.RETURN, { value }, error) }
+    / "yield" _ "in" _ enumerator:branch
+            { return tree.leaf(tree.YIELD_IN, { enumerator }, error) }
     / "yield" _ value:branch
             { return tree.leaf(tree.YIELD, { value }, error) }
     / "resume" { return tree.leaf(tree.RESUME, { }, error) }

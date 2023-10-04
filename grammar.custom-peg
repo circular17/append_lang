@@ -209,6 +209,8 @@ funStatement // [] or leaf
 return
     = "return" _ value:branch
         => #RETURN { value }
+    / "yield" _ "in" _ enumerator:branch
+            => #YIELD_IN { enumerator }
     / "yield" _ value:branch
             => #YIELD { value }
     / "resume" => #RESUME { }

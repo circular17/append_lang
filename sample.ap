@@ -1,8 +1,22 @@
 // "append" language examples
 fun n int "primes": [int] => 2..=n toLink \ sieve \ toList
+
+// "sieve" consumes a linked list and yields a linked list
 fun remain ::int "sieve": ::int
 | <> -> <>
 | p::xs -> p :: (xs filter => $x & p > 0 \ sieve)
+
+// "sieve" consumes an enumerator and yields a linked list
+fun remain int-enum "sieve": ::int => remain.fetch
+| #done -> <>
+| #ok p -> p :: (remain filter => $x % p > 0 \ sieve)
+
+// "sieve" consumes an enumerator and an enumerator
+enum remain int-enum "sieve": int => remain.fetch
+| #ok p -> {
+  yield p
+  yield in remain filter => $x % p > 0 \ sieve
+}
 
 var a/b = 5e10; c int = () ?? 7; d int
 var number int | float | decimal = 5.4

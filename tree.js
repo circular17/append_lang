@@ -174,6 +174,7 @@ const CAPTURE = "CAPTURE"
 const TAGGED_VALUE = "TAGGED_VALUE"
 const RETURN = "RETURN"
 const YIELD = "YIELD"
+const YIELD_IN = "YIELD_IN"
 const COMPOSE = "COMPOSE"
 const CALL = "CALL"
 const INTEGER = "INTEGER"
@@ -278,6 +279,7 @@ leafName = {
     TAGGED_VALUE: "tagged value",
     RETURN: "return statement",
     YIELD: "yield statement",
+    YIELD_IN: "recursive yield statement",
     CALL: "function call",
     INTEGER: "integer",
     FLOAT: "floating point value",
@@ -386,6 +388,7 @@ module.exports = {
     TAGGED_VALUE,
     RETURN,
     YIELD,
+    YIELD_IN,
     CALL,
     INTEGER,
     FLOAT,
