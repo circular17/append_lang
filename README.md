@@ -2,6 +2,8 @@
 
 Append is a programming language crafted on the core philosophy of appending actions directly to data, promoting a harmonious blend of functional and fluent design principles.
 
+[Documentation](https://github.com/circular17/append_lang/wiki) available as wiki.
+
 ## Characteristics and goals of Append
 
 **Simplicity and Brevity**: Distilled to its essence, Append strips away redundant symbols, offering a succinct syntax tailored for frequently-used constructs.
