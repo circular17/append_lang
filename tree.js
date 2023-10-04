@@ -211,6 +211,7 @@ const SPECIALIZE_TYPE = "SPECIALIZE_TYPE"
 const WITH_EFFECT = "WITH_EFFECT"
 const TRAIT_INTER = "TRAIT_INTER"
 const TRAIT_DEF = "TRAIT_DEF"
+const TRAIT_CONSTRAINT = "TRAIT_CONSTRAINT"
 const CREATE_OBJECT = "CREATE_OBJECT"
 
 leafName = {
@@ -313,6 +314,7 @@ leafName = {
     WITH_EFFECT: "expression with effect",
     TRAIT_INTER: "trait intersection",
     TRAIT_DEF: "trait definition",
+    TRAIT_CONSTRAINT: "trait constraint",
     CREATE_OBJECT: "object creation"
 }
 
@@ -420,5 +422,6 @@ module.exports = {
     WITH_EFFECT,
     TRAIT_INTER,
     TRAIT_DEF,
+    TRAIT_CONSTRAINT,
     CREATE_OBJECT
 };

@@ -64,13 +64,30 @@ deconstructElement
 typeDefs // []
     = "type" _ hd:typeDef tl:(_ ";" __ t:typeDef => t)*
         => hd::tl
-    / "trait" _ name:id __ "{" __ features:features __ "}"
-        => #TRAIT_DEF {
-            name,
-            features
-        }
+    / "trait" _ t:traitDef {
+        return [t]
+    }
     / "alias" _ hd:aliasDef tl:(_ ";" __ t:aliasDef => t)*
         => hd::tl
+
+traitDef
+    = traitConstraints:traitConstraints _ genericParams:genericParams _ name:id alias:(_ "(" o:overridableOp ")" => o)?
+    __ "{" __ features:features __ "}"
+        => #TRAIT_DEF {
+            name,
+            traitConstraints,
+            genericParams,
+            alias,
+            features
+        }
+
+traitConstraints
+    = leftAngleBracket _ hd:traitConstraint tl:(_ "," __ c:traitConstraint => c)* _ rightAngleBracket
+        => hd::tl
+    / "" => []
+traitConstraint
+    = type:id constraint:(_ t:type => t)?
+        => #TRAIT_CONSTRAINT { type, constraint }
 
 features
     = hd:feature tl:((_ "," __ / eol) f:feature => f)*
@@ -82,12 +99,13 @@ feature
     / traitInheritance
 
 traitInheritance
-    = "..." parent:getMember => #INHERITANCE { parent }
+    = "..." parent:typeByName => #INHERITANCE { parent }
 
 typeDef
-    = _ genericParams:genericParams _ name:typeId _ type:type
+    = traitConstraints:traitConstraints _ genericParams:genericParams _ name:typeId _ type:type
         => #TYPE_DEF {
             name,
+            traitConstraints,
             genericParams,
             type
         }
@@ -96,7 +114,7 @@ genericParams
     = (i:typeId _ "-" => i)*
 
 aliasDef
-    = _ genericParams:genericParams _ name:typeId _ "=" _ type:type
+    = genericParams:genericParams _ name:typeId _ "=" _ type:type
         => #ALIAS_DEF {
             name,
             genericParams,
@@ -120,7 +138,7 @@ fun
 
 funHeader
     = isGlobal:isGlobal isAsync:isAsync purity:purity
-    kind:funKind _ hd:funParam __ "\"" keywordName:$(keyword?) name:(id / overridableOp)? "\""
+    kind:funKind _ traitConstraints:traitConstraints _ hd:funParam __ "\"" keywordName:$(keyword?) name:(id / overridableOp)? "\""
     tl:(__ p:params => p)? returnType:(_ colon __ t:type => t)?
     effects:(__ "with" _ e:identifiers => e)? {
         if (keywordName)
@@ -133,6 +151,7 @@ funHeader
             purity,
             kind,
             name,
+            traitConstraints,
             params: [hd].concat(tl ?? []),
             effects: effects ?? [],
             returnType
@@ -297,7 +316,7 @@ untaggedPattern
     / dictPattern
 
 comparisonPattern
-    = operator:(">" / ">=" / leftAngleBracket / "<=" / "in") _ value:aboveComparison
+    = operator:(rightAngleBracket / ">=" / leftAngleBracket / "<=" / "in") _ value:aboveComparison
 
 tuplePattern
     = "(" startEllipsis:(_ "...")? __ hd:pattern tl:(_ "," __ v:pattern => v)*
@@ -432,8 +451,19 @@ traitIntersection
             return hd
     }
 
+specializeType
+    = hd:(genericParamType / atomicType) tl:(_ "-" __ t:(genericParamType / atomicType))* {
+        let types = hd::tl
+        if (types.length > 1)
+            return #SPECIALIZE_TYPE { base: types.pop(), params: types }
+        else
+            return hd
+    }
+genericParamType = "@" id:id => #GENERIC_PARAM_TYPE { name: id }
+
 atomicType
     = anyType
+    / traitAlias
     / listType
     / linkedListType
     / setType
@@ -516,12 +546,14 @@ lambda
             body: value,
             returnType: null
         }
-    / isAsync:isAsync purity:purity kind:("sub" / colon) _ params:params __ returnType:(colon _ t:type __ => t)? body:lambdaBody
+    / isAsync:isAsync purity:purity kind:("sub" / colon) _ traitConstraints:traitConstraints _
+    params:params __ returnType:(colon _ t:type __ => t)? body:lambdaBody
         => #FUN_DEF {
              isAsync,
              purity,
              kind: kind === ":" ? "fun" : kind,
              name: null,
+             traitConstraints,
              params: params,
              body: body,
              returnType: returnType
@@ -556,26 +588,24 @@ constructorBody
 
 voidType = void => #VOID_TYPE {}
 
-specializeType
-    = hd:(genericParamType / atomicType) tl:(_ "-" __ t:(genericParamType / atomicType))* {
-        let types = hd::tl
-        if (types.length > 1)
-            return #SPECIALIZE_TYPE { base: types.pop(), params: types }
-        else
-            return hd
-    }
-
-genericParamType = "@" id:id => #GENERIC_PARAM_TYPE { name: id }
 anyType = "any" => #ANY_TYPE {}
 
 /************* EXPRESSIONS *************/
 
 pipedExpr
-    = option:valueExpr pipeCall:(_ "\\" __ c:appendCall => c)? {
-        if (pipeCall)
+    = option:valueExpr pipeCalls:(__ "\\" __ c:appendCall => c)* {
+        if (pipeCalls.length > 0)
         {
-            pipeCall.params.unshift(option)
-            return pipeCall
+            var result = pipeCalls.pop()
+            var current = result
+            while (pipeCalls.length > 0)
+            {
+                var param = pipeCalls.pop()
+                current.params.unshift(param)
+                current = param
+            }
+            current.params.unshift(option)
+            return result
         }
         else
             return option
@@ -783,12 +813,18 @@ cartesianPower
     }
 
 range
-    = first:multiplication to:(_ op:rangeOp __ lastOrCount:multiplication step:(_ "by" __ s:multiplication => s)?)? {
+    = first:multiplication to:rangeSuffix? {
         if (to)
-            return #RANGE { first, lastOrCount: to.lastOrCount, op: to.op, step: to.step }
+        {
+            to.first = first
+            return to
+        }
         else
             return first
     }
+rangeSuffix
+    = _ op:rangeOp __ lastOrCount:multiplication step:(_ "by" __ s:multiplication => s)?
+        => #RANGE { lastOrCount, op, step }
 
 multiplication
     = hd:factor tl:otherFactor* {
@@ -946,23 +982,21 @@ getMember
     }
 
 valueByName
-    = hd:id tl:("--" id:id => id)* {
-        let ids = hd::tl
-        const name = ids.pop()
-        return #VALUE_BY_NAME { name, namespace: ids }
-    }
+    = namespace:(i:id "--" => i)* name:id
+        => #VALUE_BY_NAME { name, namespace }
     / "me"
 
 typeByName
-    = hd:typeId tl:("--" id:typeId => id)* {
-        let ids = hd::tl
-        const name = ids.pop()
-        return #TYPE_BY_NAME { name, namespace: ids }
-    }
+    = namespace:(i:id "--" => i)* name:typeId
+        => #TYPE_BY_NAME { name, namespace }
 
 typeId
     = id
     / "enum"
+    / traitAlias
+
+traitAlias
+    = "(" o:overridableOp ")" => o
 
 boolean
     = value:("yes" / "no")
@@ -1018,8 +1052,9 @@ colon = $(":" ![=:])
 
 pipe = $("|" !"}")
 logicOp = "or" / "xor" / $("&" !"=")
-comparisonOp = $("=" !">") / "!=" / $(">" ![>=<]) / ">=" / leftAngleBracket / "<=" / "in"
-leftAngleBracket = $("<" ![>|])
+comparisonOp = $("=" !">") / "!=" / rightAngleBracket / ">=" / leftAngleBracket / "<=" / "in"
+leftAngleBracket = $("<" ![>=<|])
+rightAngleBracket = $(">" ![>=<])
 concatOp = $("++" !"=")
 additiveOp = $(("+" / "-") !([=>] / ".."))
 multiplicativeOp = $(("*" / "/" / "%") !"=")

@@ -1,9 +1,14 @@
 // "append" language examples
+fun n int "primes": [int] => 2..=n toLink \ sieve \ toList
+fun remain ::int "sieve": ::int
+| <> -> <>
+| p::xs -> p :: (xs filter => $x & p > 0 \ sieve)
+
 var a/b = 5e10; c int = () ?? 7; d int
 var number int | float | decimal = 5.4
 type vec2 float*float
 var point = #vec2 (12.5, 8)
-type T-point {| x T, y T |}
+type<T (+) & (*)> T-point {| x T, y T |}
 type T-point3 {| ...T-point, z T |}
 var pointStruct = #float-point {| x: 3, y: 45.4 |}
 global fun p1 @T-point "+" p2 @T-point
@@ -46,6 +51,35 @@ fun a Concatenable & Countable "*" count int do
         | 1 -> a
         other
             a ++ a * (count - 1)
+end
+
+trait Addable (+) {
+    fun a Self "+" b Self: Self
+}
+
+trait Multipliable (*) {
+    fun a Self "*" b Self: Self
+}
+
+trait<T (+)> T-Scalable { // may be ambiguous with Multipliable
+    ...(+),
+    fun a Self "*" b T: Self
+}
+
+fun a (+)&(*) "addSquare" b (+)&(*): (+)&(*) => a*a + b*b
+
+fun a @T "addSquare" b @T: @T => a*a + b*b
+
+fun<T int-Scalable> u T "double": T => u * 2
+
+fun a @T "addSquare" b @T: @T => a*a + b*b
+fun<T> a T "addSquare" b T: T => a*a + b*b
+fun<T (+)&(*)> a T "addSquare" b T: T => a*a + b*b
+
+fun<T (+)> a T-enum "sum": T do
+    var result = #T 0
+    a each => result += $x
+    result
 end
 
 sub toDiscard "drop" => ()
@@ -412,3 +446,13 @@ enum filename "getLines": str with io do
         yield file readLine
     file close
 end
+
+type empty(); value-branch-node value*branch^2
+type T-tree empty | T-(T-tree)-node
+
+fun x @T "insert" root @T-tree: @T-tree => root
+| #empty -> #node (x, #empty, #empty)
+| #node (@y, @left, @right) -> x
+  | < y -> #node (y, x insert left, right)
+  | > y -> #node (y, left, x insert right)
+  other #node (x, left, right)

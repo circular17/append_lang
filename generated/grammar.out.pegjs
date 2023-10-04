@@ -64,13 +64,30 @@ deconstructElement
 typeDefs // []
     = "type" _ hd:typeDef tl:(_ ";" __ t:typeDef { return t })*
         { return [hd].concat(tl) }
-    / "trait" _ name:id __ "{" __ features:features __ "}"
-        { return tree.leaf(tree.TRAIT_DEF, {
-            name,
-            features
-        }, error) }
+    / "trait" _ t:traitDef {
+        return [t]
+    }
     / "alias" _ hd:aliasDef tl:(_ ";" __ t:aliasDef { return t })*
         { return [hd].concat(tl) }
+
+traitDef
+    = traitConstraints:traitConstraints _ genericParams:genericParams _ name:id alias:(_ "(" o:overridableOp ")" { return o })?
+    __ "{" __ features:features __ "}"
+        { return tree.leaf(tree.TRAIT_DEF, {
+            name,
+            traitConstraints,
+            genericParams,
+            alias,
+            features
+        }, error) }
+
+traitConstraints
+    = leftAngleBracket _ hd:traitConstraint tl:(_ "," __ c:traitConstraint { return c })* _ rightAngleBracket
+        { return [hd].concat(tl) }
+    / "" { return [] }
+traitConstraint
+    = type:id constraint:(_ t:type { return t })?
+        { return tree.leaf(tree.TRAIT_CONSTRAINT, { type, constraint }, error) }
 
 features
     = hd:feature tl:((_ "," __ / eol) f:feature { return f })*
@@ -82,12 +99,13 @@ feature
     / traitInheritance
 
 traitInheritance
-    = "..." parent:getMember { return tree.leaf(tree.INHERITANCE, { parent }, error) }
+    = "..." parent:typeByName { return tree.leaf(tree.INHERITANCE, { parent }, error) }
 
 typeDef
-    = _ genericParams:genericParams _ name:typeId _ type:type
+    = traitConstraints:traitConstraints _ genericParams:genericParams _ name:typeId _ type:type
         { return tree.leaf(tree.TYPE_DEF, {
             name,
+            traitConstraints,
             genericParams,
             type
         }, error) }
@@ -96,7 +114,7 @@ genericParams
     = (i:typeId _ "-" { return i })*
 
 aliasDef
-    = _ genericParams:genericParams _ name:typeId _ "=" _ type:type
+    = genericParams:genericParams _ name:typeId _ "=" _ type:type
         { return tree.leaf(tree.ALIAS_DEF, {
             name,
             genericParams,
@@ -120,7 +138,7 @@ fun
 
 funHeader
     = isGlobal:isGlobal isAsync:isAsync purity:purity
-    kind:funKind _ hd:funParam __ "\"" keywordName:$(keyword?) name:(id / overridableOp)? "\""
+    kind:funKind _ traitConstraints:traitConstraints _ hd:funParam __ "\"" keywordName:$(keyword?) name:(id / overridableOp)? "\""
     tl:(__ p:params { return p })? returnType:(_ colon __ t:type { return t })?
     effects:(__ "with" _ e:identifiers { return e })? {
         if (keywordName)
@@ -133,6 +151,7 @@ funHeader
             purity,
             kind,
             name,
+            traitConstraints,
             params: [hd].concat(tl ?? []),
             effects: effects ?? [],
             returnType
@@ -297,7 +316,7 @@ untaggedPattern
     / dictPattern
 
 comparisonPattern
-    = operator:(">" / ">=" / leftAngleBracket / "<=" / "in") _ value:aboveComparison
+    = operator:(rightAngleBracket / ">=" / leftAngleBracket / "<=" / "in") _ value:aboveComparison
 
 tuplePattern
     = "(" startEllipsis:(_ "...")? __ hd:pattern tl:(_ "," __ v:pattern { return v })*
@@ -432,8 +451,19 @@ traitIntersection
             return hd
     }
 
+specializeType
+    = hd:(genericParamType / atomicType) tl:(_ "-" __ t:(genericParamType / atomicType))* {
+        let types = [hd].concat(tl)
+        if (types.length > 1)
+            return tree.leaf(tree.SPECIALIZE_TYPE, { base: types.pop(), params: types }, error)
+        else
+            return hd
+    }
+genericParamType = "@" id:id { return tree.leaf(tree.GENERIC_PARAM_TYPE, { name: id }, error) }
+
 atomicType
     = anyType
+    / traitAlias
     / listType
     / linkedListType
     / setType
@@ -516,12 +546,14 @@ lambda
             body: value,
             returnType: null
         }, error) }
-    / isAsync:isAsync purity:purity kind:("sub" / colon) _ params:params __ returnType:(colon _ t:type __ { return t })? body:lambdaBody
+    / isAsync:isAsync purity:purity kind:("sub" / colon) _ traitConstraints:traitConstraints _
+    params:params __ returnType:(colon _ t:type __ { return t })? body:lambdaBody
         { return tree.leaf(tree.FUN_DEF, {
              isAsync,
              purity,
              kind: kind === ":" ? "fun" : kind,
              name: null,
+             traitConstraints,
              params: params,
              body: body,
              returnType: returnType
@@ -556,26 +588,24 @@ constructorBody
 
 voidType = void { return tree.leaf(tree.VOID_TYPE, {}, error) }
 
-specializeType
-    = hd:(genericParamType / atomicType) tl:(_ "-" __ t:(genericParamType / atomicType))* {
-        let types = [hd].concat(tl)
-        if (types.length > 1)
-            return tree.leaf(tree.SPECIALIZE_TYPE, { base: types.pop(), params: types }, error)
-        else
-            return hd
-    }
-
-genericParamType = "@" id:id { return tree.leaf(tree.GENERIC_PARAM_TYPE, { name: id }, error) }
 anyType = "any" { return tree.leaf(tree.ANY_TYPE, {}, error) }
 
 /************* EXPRESSIONS *************/
 
 pipedExpr
-    = option:valueExpr pipeCall:(_ "\\" __ c:appendCall { return c })? {
-        if (pipeCall)
+    = option:valueExpr pipeCalls:(__ "\\" __ c:appendCall { return c })* {
+        if (pipeCalls.length > 0)
         {
-            pipeCall.params.unshift(option)
-            return pipeCall
+            var result = pipeCalls.pop()
+            var current = result
+            while (pipeCalls.length > 0)
+            {
+                var param = pipeCalls.pop()
+                current.params.unshift(param)
+                current = param
+            }
+            current.params.unshift(option)
+            return result
         }
         else
             return option
@@ -783,12 +813,18 @@ cartesianPower
     }
 
 range
-    = first:multiplication to:(_ op:rangeOp __ lastOrCount:multiplication step:(_ "by" __ s:multiplication { return s })?)? {
+    = first:multiplication to:rangeSuffix? {
         if (to)
-            return tree.leaf(tree.RANGE, { first, lastOrCount: to.lastOrCount, op: to.op, step: to.step }, error)
+        {
+            to.first = first
+            return to
+        }
         else
             return first
     }
+rangeSuffix
+    = _ op:rangeOp __ lastOrCount:multiplication step:(_ "by" __ s:multiplication { return s })?
+        { return tree.leaf(tree.RANGE, { lastOrCount, op, step }, error) }
 
 multiplication
     = hd:factor tl:otherFactor* {
@@ -946,23 +982,21 @@ getMember
     }
 
 valueByName
-    = hd:id tl:("--" id:id { return id })* {
-        let ids = [hd].concat(tl)
-        const name = ids.pop()
-        return tree.leaf(tree.VALUE_BY_NAME, { name, namespace: ids }, error)
-    }
+    = namespace:(i:id "--" { return i })* name:id
+        { return tree.leaf(tree.VALUE_BY_NAME, { name, namespace }, error) }
     / "me"
 
 typeByName
-    = hd:typeId tl:("--" id:typeId { return id })* {
-        let ids = [hd].concat(tl)
-        const name = ids.pop()
-        return tree.leaf(tree.TYPE_BY_NAME, { name, namespace: ids }, error)
-    }
+    = namespace:(i:id "--" { return i })* name:typeId
+        { return tree.leaf(tree.TYPE_BY_NAME, { name, namespace }, error) }
 
 typeId
     = id
     / "enum"
+    / traitAlias
+
+traitAlias
+    = "(" o:overridableOp ")" { return o }
 
 boolean
     = value:("yes" / "no")
@@ -1018,8 +1052,9 @@ colon = $(":" ![=:])
 
 pipe = $("|" !"}")
 logicOp = "or" / "xor" / $("&" !"=")
-comparisonOp = $("=" !">") / "!=" / $(">" ![>=<]) / ">=" / leftAngleBracket / "<=" / "in"
-leftAngleBracket = $("<" ![>|])
+comparisonOp = $("=" !">") / "!=" / rightAngleBracket / ">=" / leftAngleBracket / "<=" / "in"
+leftAngleBracket = $("<" ![>=<|])
+rightAngleBracket = $(">" ![>=<])
 concatOp = $("++" !"=")
 additiveOp = $(("+" / "-") !([=>] / ".."))
 multiplicativeOp = $(("*" / "/" / "%") !"=")
