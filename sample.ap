@@ -1,17 +1,19 @@
 // "append" language examples
-fun n int "primes": [int] => 2..=n toLink \ sieve \ toList
 
 // "sieve" consumes a linked list and yields a linked list
+fun n int "primes": [int] => 2..=n toLink \ sieve \ toList
 fun remain ::int "sieve": ::int
 | <> -> <>
 | p::xs -> p :: (xs filter => $x & p > 0 \ sieve)
 
 // "sieve" consumes an enumerator and yields a linked list
+fun n int "primes": [int] => 2..=n \ sieve \ toList
 fun remain int-enum "sieve": ::int => remain.fetch
 | #done -> <>
 | #ok p -> p :: (remain filter => $x % p > 0 \ sieve)
 
 // "sieve" consumes an enumerator and an enumerator
+fun n int "primes": int-enum => 2..=n \ sieve
 enum remain int-enum "sieve": int => remain.fetch
 | #ok p -> {
   yield p
@@ -185,6 +187,12 @@ end
 
 // doing things on a tuple
 (2, 3) reduce (+)
+
+fun list "foldr" acc f => list
+| <> -> acc
+| x::xs -> x f (xs foldr acc; f)
+
+fun list "sumList" => list foldr 0 (+)
 
 (2, 3) case (@x, @y) -> x + y
 (2, 3)
