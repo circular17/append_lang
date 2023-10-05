@@ -236,13 +236,18 @@ branch
     / loop
 
 loop
-    = "while" _ condition:valueExpr __ body:(branch / inlineBlock / return)
+    = "while" _ condition:valueExpr __ body:loopBody
         { return tree.leaf(tree.WHILE, { condition, body }, error) }
-    / "iter" body:(branch / inlineBlock / return)
+    / "iter" body:loopBody
         { return tree.leaf(tree.ITER, { body }, error) }
 
+loopBody
+    = branch
+    / inlineBlock
+    / return
+
 optionWithPipe
-    = value:pipedExpr option:(ternary / case / wiseBlock)? {
+    = value:pipedExpr option:(ternary / case / wiseBlock / for)? {
         if (option) {
             option.key = value
             return option
@@ -251,8 +256,37 @@ optionWithPipe
             return value
     }
 
+for
+    = _ "for" _ "@" _ variable:id __ body:loopBody
+        { return tree.leaf(tree.FOR_EACH, { variable, body }, error) }
+    / _ "for" body:case {
+        const variable = tree.getLoopVariable()
+        body.key = tree.leaf(tree.VALUE_BY_NAME, { name: variable, namespace: [] }, error)
+        return tree.leaf(tree.FOR_EACH, { variable, body }, error)
+    }
+
 optionNoPipe
     = value:valueExpr option:(ternary / wiseBlock)? {
+        if (option) {
+            option.key = value
+            return option
+        }
+        else
+            return value
+    }
+
+optionNoCase
+    = value:pipedExpr option:(ternary / wiseBlock / for)? {
+        if (option) {
+            option.key = value
+            return option
+        }
+        else
+            return value
+    }
+
+optionalTernary
+    = value:pipedExpr option:ternary? {
         if (option) {
             option.key = value
             return option
@@ -294,7 +328,7 @@ caseBody
     }
 
 caseOption
-    = hd:pattern tl:(_ "," __ p:pattern { return p })* __ "->" __ value:(optionNoPipe / inlineBlock / return)
+    = hd:pattern tl:(_ "," __ p:pattern { return p })* __ "->" __ value:(optionNoCase / inlineBlock / return)
         { return tree.leaf(tree.CASE_OPTION, { patterns: [hd].concat(tl), value }, error) }
 
 pattern
@@ -659,7 +693,7 @@ assignment
     }
 
 assignValue
-    = _ op:assignmentOp __ value:branch
+    = _ op:assignmentOp __ value:optionalTernary
         { return tree.leaf(tree.ASSIGN, { operator: op, value }, error) }
 
 withEffect
@@ -1014,7 +1048,7 @@ getMember
 valueByName
     = namespace:(i:id "--" { return i })* name:valueId
         { return tree.leaf(tree.VALUE_BY_NAME, { name, namespace }, error) }
-    / "me"
+    / "me" { return tree.leaf(tree.VALUE_BY_NAME, { name: "me", namespace: [] }, error) }
 
 valueId
     = id
@@ -1078,7 +1112,7 @@ eol = ([ \t] / comment)* "\r"? "\n" __
 keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return" / "yield" / "state"
     / "new" / "const" / "init" / "base" / "prop" / "me" / "with"
     / "type" / "any" / "enum" / "set" / "dict" / "yes" / "no" / "trait" / "alias"
-    / "wise" / "else" / "while" / "iter" / "next" / "break" / "case" / "other" / "when" / "resume"
+    / "wise" / "else" / "while" / "iter" / "for" / "next" / "break" / "case" / "other" / "when" / "resume"
     / "in" / "by" / "or" / "xor" / "global" / "async" / "defer") ![A-Za-z0-9_]
 
 assignmentOp = ":=" / "*=" / "/=" / "%=" / "+=" / "-=" / "++="

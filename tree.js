@@ -59,7 +59,7 @@ function fixFunction(f, error)
             )
         }, error)
     }
-    if (f.kind !== "enum")
+    if (f.kind === "fun")
         f.body = addLastReturn(f.body, error)
 }
 
@@ -111,6 +111,13 @@ function checkFunctionCall(node, error)
     if ([VOID_VALUE, STRING_VALUE, LIST, SET, REC_VALUE, CREATE_OBJECT,
          INTEGER, FLOAT, DICT_VALUE, BOOLEAN, LINKED_LIST].includes(node._))
         error(capitalFirst(leafName[node._]) + " cannot be used as a function")
+}
+
+let _loopVariableCounter = 0
+function getLoopVariable()
+{
+    _loopVariableCounter += 1
+    return "__" + _loopVariableCounter
 }
 
 function capitalFirst(text)
@@ -271,6 +278,7 @@ const TRAIT_CONSTRAINT = "TRAIT_CONSTRAINT"
 const CREATE_OBJECT = "CREATE_OBJECT"
 const COMPARISON_PATTERN = "COMPARISON_PATTERN"
 const ABSTRACT_BODY = "ABSTRACT_BODY"
+const FOR_EACH = "FOR_EACH"
 
 leafName = {
     MODULE: "module",
@@ -374,13 +382,15 @@ leafName = {
     TRAIT_CONSTRAINT: "trait constraint",
     CREATE_OBJECT: "object creation",
     COMPARISON_PATTERN: "comparison pattern",
-    ABSTRACT_BODY: "abstract body"
+    ABSTRACT_BODY: "abstract body",
+    FOR_EACH: "for loop",
 }
 
 module.exports = {
     leaf,
     isLeaf,
     getLambdaVariables,
+    getLoopVariable,
     fixFunction,
     is,
     MODULE,
@@ -484,5 +494,6 @@ module.exports = {
     TRAIT_CONSTRAINT,
     CREATE_OBJECT,
     COMPARISON_PATTERN,
-    ABSTRACT_BODY
+    ABSTRACT_BODY,
+    FOR_EACH
 };

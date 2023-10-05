@@ -92,9 +92,11 @@ fun a @T "addSquare" b @T: @T => a*a + b*b
 fun<T> a T "addSquare" b T: T => a*a + b*b
 fun<T (+)&(*)> a T "addSquare" b T: T => a*a + b*b
 
-fun<T (+)> a T-enum "sum": T do
+fun<T (+)> a T-enum "sum": T | err do
     var result = #T 0
-    a each => result += $x
+    a for
+    | #ok @x -> result += x
+    | #err @e -> return e
     result
 end
 
@@ -108,6 +110,7 @@ fun () "someStuff": done | any-err do
     mut a del "goodbye"
     () optionalStuff \ drop   // ignore the errors
     "Processing successful" print
+    #done
 when // handle implicit return values different from #done
     | #note @message -> resume   // opting out
     | #notNecessary @message -> "This processing is not necessary so we'll stop" print
@@ -121,7 +124,7 @@ when // handle implicit return values different from #done
     }
 end
 
-fun mut x "inc" => x += 1
+sub mut x "inc" => x += 1
 mut a inc
 
 let square = :x => x * x
@@ -207,11 +210,12 @@ fun list "sumList" => list foldr 0 (+)
 }
 
 // iterating
-0 ..< 10 by 2 each :j {
+0 ..< 10 by 2 for @j {
     "j = {j}" print
 }
 
-0 ..= 9 each => "n = {$n}" print
+0 ..= 9 for @n
+    "n = {$n}" print
 
 var i = 0
 while i < 10 {
@@ -352,9 +356,43 @@ let numbersEnum int-enum = enum: int {
     yield 4
 }
 
+enum<T, U> a T-enum "map" action T->(U-ok | err): U do
+    iter () a.fetch
+    | #ok @item -> {
+        yield #ok item action
+        next
+    }
+    | @e err -> yield e
+end
+
+enum<T> a T-enum "filter" predicate T->(bool-ok | err): T do
+    iter () a.fetch
+    | #ok @item -> (item predicate
+        | #ok @keep -> {
+            keep ? yield #ok item
+            next
+        }
+        | @e err -> yield e)
+    | @e err -> yield e
+end
+
+fun<T> a T-enum "toList": [T]-ok | err do
+    var b [T]
+    a for
+    | #ok @x -> mut b add x
+    | @e err -> return e
+    b
+end
+
+enum<T> a [T] "toEnum": T do
+    a for @x
+        yield x
+end
+
 fun lst @T-enum "tally": dict{@T -> int} do
     var counts dict{T -> int} = dict{}
-    lst each :x => counts[x] = (counts[x] ?? 0) + 1 // supposing that ?? can be applied to (#ok T | #none)
+    lst for @x
+        counts[x] = (counts[x] ?? 0) + 1 // supposing that ?? can be applied to (#ok T | #none)
     counts
 end
 
@@ -373,12 +411,13 @@ end
 
 fun keys set{@T} "associate" f @T->@U : dict{@T -> @U} do
     var result dict{T -> U} = dict{}
-    keys each :k => result[k] := k f
+    keys for @k
+        result[k] := k f
     result
 end
 
 fun ab @T-enum^2 "tally": dict{@T -> int*int} do
-    let (aCounts, bCounts) = ab each tally
+    let (aCounts, bCounts) = ab map tally
     let allKeys = aCounts.keys {+} bCounts.keys
     allKeys associate :k => (aCounts[k] ?? 0, bCounts[k] ?? 0)
 end

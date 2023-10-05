@@ -413,7 +413,10 @@ mapJS = {
     COMPARISON_PATTERN: (leaf) => {
         return leaf.operator + " " + toJS(leaf.value)
     },
-    ABSTRACT_BODY: function() { return "/* abstract */" }
+    ABSTRACT_BODY: () => { return "/* abstract */" },
+    FOR_EACH: (leaf) => {
+        return "for (const " + leaf.variable + " of " + toJS(leaf.key) + ") " + toJS(leaf.body)
+    }
 }
 
 module.exports = {
