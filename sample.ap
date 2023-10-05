@@ -2,25 +2,25 @@
 
 // "sieve" consumes a linked list and yields a linked list
 fun n int "primes": [int] => 2..=n toLink \ sieve \ toList
-fun remain ::int "sieve": ::int
+fun remain int<> "sieve": int<>
 | <> -> <>
-| p::xs -> p :: (xs filter => $x & p > 0 \ sieve)
+| @p::@xs -> p :: (xs filter => $x % p > 0 \ sieve)
 
 // "sieve" consumes an enumerator and yields a linked list
 fun n int "primes": [int] => 2..=n \ sieve \ toList
-fun remain int-enum "sieve": ::int => remain.fetch
+fun remain int-enum "sieve": int<> => () remain.fetch
 | #done -> <>
-| #ok p -> p :: (remain filter => $x % p > 0 \ sieve)
+| #ok @p -> p :: (remain filter => $x % p > 0 \ sieve)
 
 // "sieve" consumes an enumerator and an enumerator
 fun n int "primes": int-enum => 2..=n \ sieve
-enum remain int-enum "sieve": int => remain.fetch
-| #ok p -> {
+enum remain int-enum "sieve": int => () remain.fetch
+| #ok @p -> {
   yield p
   yield in remain filter => $x % p > 0 \ sieve
 }
 
-var a/b = 5e10; c int = () ?? 7; d int
+var a/b = 5e10; c int = #none ?? 7; d int
 var number int | float | decimal = 5.4
 type vec2 float*float
 var point = #vec2 (12.5, 8)
@@ -48,7 +48,7 @@ trait Countable {
 }
 
 trait StringLike {
-    ...Concatenable,
+    ...Concatenable
     fun a Self "substring" from int; to int: Self
 }
 
@@ -126,19 +126,22 @@ mut a inc
 
 let square = :x => x * x
 var subroutine ()->()
-var linkedList ::int = 12::34::67::<>
+var linkedList int<> = 12::34::67::<>
 linkedList head
 | #none -> "linked list is empty" print
 | #ok @value -> "linked list starts with {value}" print
 
-fun list ::any "length": int
+fun list any<> "length": int
     | head::tail -> 1 + (tail length)
     | <> -> 0
 
 var optionalList [int]? = #none
-optionalList = #some [1, 2, 3]
-mut optionalList ins (-12); 0
-mut optionalList del 1+..2 // range from 1, 2 elements long
+optionalList = #ok [1, 2, 3]
+optionalList
+| #ok @a -> {
+    optionalList := a ins (-12); 0 // insert at index 0
+                    \ del 1+..2    // range from 1, 2 elements long
+}
 
 var setOfStr set{str} = set{"a", "b", "c"}
 let onlyAB = setOfStr but "c"
@@ -370,7 +373,7 @@ end
 
 fun keys set{@T} "associate" f @T->@U : dict{@T -> @U} do
     var result dict{T -> U} = dict{}
-    keys each :k => result[k] = k f
+    keys each :k => result[k] := k f
     result
 end
 
@@ -440,11 +443,11 @@ fun low @T "..<" high @T; step: @T-enum =>
       value >= low & value < high
   |}
 
-record Console {|
+type Console {|
     sub data any "log" => ?
 |}
 
-record JSConsole {|
+type JSConsole {|
     ...Console
     sub data any "log" => data JS--Console.log
 |}

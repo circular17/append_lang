@@ -94,8 +94,14 @@ features
         { return [hd].concat(tl) }
 
 feature
-    = funHeader
-    / propHeader
+    = f:funHeader {
+        f.body = tree.leaf(tree.ABSTRACT_BODY, {}, error)
+        return f
+    }
+    / p:propHeader {
+        p.getter = tree.leaf(tree.ABSTRACT_BODY, {}, error)
+        return p
+    }
     / traitInheritance
 
 traitInheritance
@@ -133,6 +139,7 @@ when
 fun
     = f:funHeader _ body:funBody {
         f.body = body
+        tree.fixFunction(f, error)
         return f
     }
 
@@ -154,7 +161,7 @@ funHeader
             traitConstraints,
             params: [hd].concat(tl ?? []),
             effects: effects ?? [],
-            returnType
+            returnType: returnType ?? (kind === "sub" ? tree.leaf(tree.VOID_TYPE, {}, error): tree.leaf(tree.ANY_TYPE, {}, error))
         }, error)
     }
 
@@ -168,11 +175,16 @@ isAsync
 
 funParam
     = mut:("mut" _)? names:identifiers type:(_ t:type { return t })?
-        { return tree.leaf(tree.FUN_PARAM_DEF, { names, type, mutable: !!mut }, error) }
+        { return tree.leaf(tree.FUN_PARAM_DEF, {
+            names,
+            type: type ?? tree.leaf(tree.ANY_TYPE, {}, error),
+            mutable: !!mut
+        }, error) }
     / void
         { return tree.leaf(tree.FUN_PARAM_DEF, {
-            names:[""],
-            type: tree.leaf(tree.VOID_TYPE, {}, error)
+            names:["void"],
+            type: tree.leaf(tree.VOID_TYPE, {}, error),
+            mutable: false
         }, error) }
 
 params // []
@@ -188,8 +200,8 @@ purity
 
 funBody
     = __ "=>" __ v:branch { return v }
-    / __ "=>" _ "?" { return null }
-    / __ explicitFunBlock
+    / __ "=>" _ "?" { return tree.leaf(tree.ABSTRACT_BODY, { }, error) }
+    / __ b:explicitFunBlock { return b }
     / case
 
 explicitFunBlock
@@ -266,23 +278,23 @@ case
 
 inlineBlock
     = "{" !(([-+&*^] / [><] "="? / "!=") "}") __ statements:funStatements __ "}"
-        { return tree.leaf(tree.CODE_BLOCK, { statements }, error) }
+        { return tree.leaf(tree.CODE_BLOCK, { statements, effects: [] }, error) }
 
 /************* PATTERN MATCHING *************/
 
 caseBody
     = hd:caseOption tl:(__ pipe _ o:caseOption { return o })*
     otherValue:(__ "other" __ value:(branch / inlineBlock / return) { return value })? {
-        var options = [hd].concat(tl)
+        var cases = [hd].concat(tl)
         if (otherValue)
-            options.push(tree.leaf(tree.CASE_OPTION, {
-                pattern: tree.leaf(tree.CAPTURE, { name: "_" }, error),
+            cases.push(tree.leaf(tree.CASE_OPTION, {
+                patterns: [tree.leaf(tree.CAPTURE, { name: "_", type: tree.leaf(tree.ANY_TYPE, { }, error) }, error)],
                 value: otherValue }, error))
-        return tree.leaf(tree.CASE, { options }, error)
+        return tree.leaf(tree.CASE, { cases }, error)
     }
 
 caseOption
-    = hd:pattern tl:(_ "," __ p:pattern { return p })* __ "->" __ value:(branch / inlineBlock / return)
+    = hd:pattern tl:(_ "," __ p:pattern { return p })* __ "->" __ value:(optionNoPipe / inlineBlock / return)
         { return tree.leaf(tree.CASE_OPTION, { patterns: [hd].concat(tl), value }, error) }
 
 pattern
@@ -290,7 +302,7 @@ pattern
     / valueExpr
 
 taggedPattern
-    = tag:tag value:(_ pattern)?
+    = tag:tag value:(_ p:pattern { return p })?
         { return tree.leaf(tree.TAGGED_VALUE, {
             tag,
             value: value ?? tree.leaf(tree.VOID_VALUE, { }, error)
@@ -298,7 +310,7 @@ taggedPattern
     / linkedListPattern
 
 linkedListPattern
-    = head:untaggedPattern tail:(_ "::" __ t:linkedListPattern { return t })* {
+    = head:untaggedPattern tail:(_ "::" __ t:linkedListPattern { return t })? {
         if (tail)
             return tree.leaf(tree.LINKED_LIST, {
                 head,
@@ -319,6 +331,7 @@ untaggedPattern
 
 comparisonPattern
     = operator:(rightAngleBracket / ">=" / leftAngleBracket / "<=" / "in") _ value:aboveComparison
+        { return tree.leaf(tree.COMPARISON_PATTERN, { operator, value }, error) }
 
 tuplePattern
     = "(" startEllipsis:(_ "...")? __ hd:pattern tl:(_ "," __ v:pattern { return v })*
@@ -345,7 +358,7 @@ recPattern
 
 recMemberPattern
     = name:id _ colon __ value:pattern
-        { return tree.leaf(tree.REC_MEMBER_VALUE, { name, value }, error) }
+        { return tree.leaf(tree.REC_FIELD_VALUE, { name, value }, error) }
 
 listPattern
     = "[" _ ellipsis:("..." _)? "]"
@@ -390,7 +403,7 @@ capture
             name: id,
             type: type ?? tree.leaf(tree.ANY_TYPE, { }, error)
         }, error) }
-    / id:"_" { return tree.leaf(tree.CAPTURE, { name: id }, error) } // any value
+    / id:"_" { return tree.leaf(tree.CAPTURE, { name: id, type: tree.leaf(tree.ANY_TYPE, { }, error) }, error) } // any value
 
 /************* TYPE DEFINITIONS *************/
 
@@ -400,7 +413,7 @@ unionType
     = hd:functionType tl:(_ pipe __ t:functionType { return t })* {
         if (tl.length > 0) {
             const types = [hd].concat(tl)
-            if (types.some(t => tree.isVoidType(t)))
+            if (types.some(t => tree.is(t, tree.VOID_TYPE)))
                 error("Void type cannot be in an union")
             return tree.leaf(tree.UNION_TYPE, { types }, error)
         }
@@ -423,9 +436,9 @@ voidTypeOrNot
     / concatType
 
 concatType
-    = hd:tupleType tl:(_ "++" __ tupleType)* {
+    = hd:tupleType tl:(_ concatOp __ tupleType)* {
         return tl.length > 0
-            ? tree.leaf(tree.CONCAT_TYPE, { records: [hd].concat(tl) }, error)
+            ? tree.leaf(tree.CONCAT_TYPE, { types: [hd].concat(tl) }, error)
             : hd
     }
 
@@ -454,7 +467,7 @@ traitIntersection
     }
 
 specializeType
-    = hd:(genericParamType / atomicType) tl:(_ "-" __ t:(genericParamType / atomicType))* {
+    = hd:(genericParamType / linkedListType) tl:(_ "-" __ t:(genericParamType / linkedListType) { return t })* {
         let types = [hd].concat(tl)
         if (types.length > 1)
             return tree.leaf(tree.SPECIALIZE_TYPE, { base: types.pop(), params: types }, error)
@@ -463,11 +476,17 @@ specializeType
     }
 genericParamType = "@" id:id { return tree.leaf(tree.GENERIC_PARAM_TYPE, { name: id }, error) }
 
+linkedListType = elementType:atomicType tail:(_ "<>")? {
+        if (tail)
+            return tree.leaf(tree.LINKED_LIST_TYPE, { type: elementType }, error)
+        else
+            return elementType
+    }
+
 atomicType
     = anyType
     / traitAlias
     / listType
-    / linkedListType
     / setType
     / dictType
     / recType
@@ -477,7 +496,6 @@ atomicType
     / "#" { error("Unexpected \"#\" in type expression") }
 
 listType = "[" __ elementType:type __ "]" { return tree.leaf(tree.LIST_TYPE, { type: elementType }, error) }
-linkedListType = "::" _ elementType:type { return tree.leaf(tree.LINKED_LIST_TYPE, { type: elementType }, error) }
 
 setType = "set" _ "{" __ elementType:type __ "}" { return tree.leaf(tree.SET_TYPE, { type: elementType }, error) }
 
@@ -510,10 +528,19 @@ recFieldType
     defaultValue:(_ ":" __ value:valueExpr { return value })? {
         if (!type && !defaultValue)
             error("The type or the value of the member must be specified")
-        return tree.leaf(tree.REC_MEMBER_TYPE, { modifier, names, type, defaultValue }, error)
+        return tree.leaf(tree.REC_FIELD_TYPE, {
+            modifier,
+            names,
+            type: type ?? tree.leaf(tree.ANY_TYPE, {}, error),
+            defaultValue
+        }, error)
     }
     / modifier:"base" _ names:identifiers _ "=" __ defaultValue:valueExpr
-        { return tree.leaf(tree.REC_MEMBER_TYPE, { modifier, names, defaultValue }, error) }
+        { return tree.leaf(tree.REC_FIELD_TYPE, {
+            modifier,
+            names,
+            defaultValue
+        }, error) }
 recFieldTypeModifier
     = "const" / "init" / "var"
 
@@ -535,7 +562,7 @@ setter
 getterBody
     = __ "=>" __ v:branch { return v }
     / __ "{" __ s:funStatements __ "}"
-        { return tree.leaf(tree.CODE_BLOCK, { statements: s }, error) }
+        { return tree.leaf(tree.CODE_BLOCK, { statements: s, effects: [] }, error) }
 
 lambda
     = isAsync:isAsync purity:purity kind:(m:"sub" _ { return m })? "=>" __ value:optionNoPipe
@@ -544,9 +571,14 @@ lambda
             purity,
             kind: kind ?? "fun",
             name: null,
-            params: tree.getLambdaVariables(value),
+            params: tree.getLambdaVariables(value).toSorted().map(name =>
+                tree.leaf(tree.FUN_PARAM_DEF, {
+                    names: [name],
+                    type: tree.leaf(tree.ANY_TYPE, {}, error),
+                    mutable: false
+                }, error)),
             body: value,
-            returnType: null
+            returnType: kind === "sub" ? tree.leaf(tree.VOID_TYPE, {}, error) : tree.leaf(tree.ANY_TYPE, {}, error)
         }, error) }
     / isAsync:isAsync purity:purity kind:("sub" / colon) _ traitConstraints:traitConstraints _
     params:params __ returnType:(colon _ t:type __ { return t })? body:lambdaBody
@@ -558,20 +590,20 @@ lambda
              traitConstraints,
              params: params,
              body: body,
-             returnType: returnType
+             returnType: returnType ?? (kind === "sub" ? tree.leaf(tree.VOID_TYPE, {}, error) : tree.leaf(tree.ANY_TYPE, {}, error))
          }, error) }
      / isAsync:isAsync purity:purity "enum" __ returnType:(colon _ t:type __ { return t })? body:lambdaBody
         { return tree.leaf(tree.INLINE_ENUM, {
             isAsync,
             purity,
             body: body,
-            returnType: returnType ?? "any"
+            returnType: returnType ?? tree.leaf(tree.ANY_TYPE, {}, error)
         }, error) }
 
 lambdaBody
     = "=>" __ v:optionNoPipe { return v }
     / "{" __ s:funStatements __ "}"
-        { return tree.leaf(tree.CODE_BLOCK, { statements: s }, error) }
+        { return tree.leaf(tree.CODE_BLOCK, { statements: s, effects: [] }, error) }
     / case
 
 constructor
@@ -642,7 +674,7 @@ effects // []
     = _ "with" _ hd:default tl:(_ "," __ d:default { return d })*
         { return [hd].concat(tl) }
 
-default = hd:disjunction tl:(__ "??" __ d:default { return d })* {
+default = hd:disjunction tl:(__ "??" __ d:disjunction { return d })* {
         return tl.length > 0
             ? tree.leaf(tree.DEFAULT_VALUE, { values: [hd].concat(tl) }, error)
             : hd
@@ -704,18 +736,18 @@ linkedList
     }
 
 modifyRec
-    = set:concat changes:(__ "<|" _ hd:modifyMember tl:(__ "<|" c:modifyMember { return c })* { return [hd].concat(tl) })* {
-        if (changes.length > 0)
-            return tree.leaf(tree.MODIFY_REC, { set, changes }, error)
+    = record:concat changes:(__ "<|" _ hd:modifyMember tl:(__ "<|" c:modifyMember { return c })* { return [hd].concat(tl) })? {
+        if (changes)
+            return tree.leaf(tree.MODIFY_REC, { record, changes }, error)
         else
-            return set
+            return record
     }
 
 modifyMember
     = name:id _ colon __ value:valueExpr
-        { return tree.leaf(tree.REC_MEMBER_VALUE, { name, value }, error) }
+        { return tree.leaf(tree.REC_FIELD_VALUE, { name, value }, error) }
     / "!" _ name:id
-        { return tree.leaf(tree.REC_MEMBER_VALUE, { name, value: null }, error) } // remove
+        { return tree.leaf(tree.REC_FIELD_VALUE, { name, value: tree.leaf(tree.VOID_VALUE, {}, error) }, error) } // remove
 
 concat
     = hd:addition tl:(__ concatOp __ other:addition { return other })* {
@@ -742,7 +774,7 @@ term = call
 
 call
     = c:nestedCall {
-        if (tree.isNodeOf(tree.MUTABLE_PARAM))
+        if (tree.is(c, tree.MUTABLE_PARAM))
             error("Mutable keyword can only used to pass parameters")
         return c
     }
@@ -861,7 +893,7 @@ indexing
         }
 
 compose
-    = hd:taggedAtom tl:(_ composeOp __ taggedAtom)* {
+    = hd:taggedAtom tl:(_ composeOp __ a:taggedAtom { return a })* {
         if (tl.length > 0)
             return tree.leaf(tree.COMPOSE, { functions: [hd].concat(tl) }, error)
         else
@@ -872,12 +904,11 @@ compose
 
 taggedAtom
     = tag:tag value:(__ v:taggedAtom { return v })?
-        { return tree.leaf(tree.TAGGED_VALUE, { tag, value }, error) }
+        { return tree.leaf(tree.TAGGED_VALUE, { tag, value: value ?? tree.leaf(tree.VOID_VALUE, {}, error) }, error) }
     / atom
 
 atom
-    = operatorFun
-    / tuple
+    = tuple
     / recValue
     / list
     / set
@@ -889,10 +920,6 @@ atom
     / lambda
     / voidValue
     / boolean
-
-operatorFun
-    = "(" op:overridableOp ")"
-        { return tree.leaf(tree.VALUE_BY_NAME, { op }, error) }
 
 voidValue
     = void { return tree.leaf(tree.VOID_VALUE, {}, error) }
@@ -923,14 +950,15 @@ recValue
     }
 recMembers
     = hd:recMemberValue tl:(_ ("," _ / eol) m:recMemberValue { return m })*
+        { return [hd].concat(tl) }
 recMemberValue
     = recMemberFieldValue
     / propDef
     / fun
     / splat
 recMemberFieldValue
-    = modifier:(m:recMemberFieldValueModifier _)? name:id _ type:type? _ colon __ value:branch
-        { return tree.leaf(tree.REC_MEMBER_VALUE, { modifier, name, type, value }, error) }
+    = modifier:(m:recMemberFieldValueModifier _ { return m })? name:id _ type:type? _ colon __ value:branch
+        { return tree.leaf(tree.REC_FIELD_VALUE, { modifier, name, type, value }, error) }
 recMemberFieldValueModifier
     = "const" / "var"
 
@@ -984,9 +1012,13 @@ getMember
     }
 
 valueByName
-    = namespace:(i:id "--" { return i })* name:id
+    = namespace:(i:id "--" { return i })* name:valueId
         { return tree.leaf(tree.VALUE_BY_NAME, { name, namespace }, error) }
     / "me"
+
+valueId
+    = id
+    / "(" op:overridableOp ")" { return op }
 
 typeByName
     = namespace:(i:id "--" { return i })* name:typeId
@@ -1005,7 +1037,7 @@ boolean
         { return tree.leaf(tree.BOOLEAN, { value: value === "yes" }, error) }
 
 tag
-    = "#" specializeType
+    = "#" s:specializeType { return s }
 
 /************* TOKENS *************/
 
@@ -1054,7 +1086,7 @@ colon = $(":" ![=:])
 
 pipe = $("|" !"}")
 logicOp = "or" / "xor" / $("&" !"=")
-comparisonOp = $("=" !">") / "!=" / rightAngleBracket / ">=" / leftAngleBracket / "<=" / "in"
+comparisonOp = $("=" !">") / "!=" / rightAngleBracket / ">=" / leftAngleBracket / "<=" / "in" ![_a-zA-Z0-9]
 leftAngleBracket = $("<" ![>=<|])
 rightAngleBracket = $(">" ![>=<])
 concatOp = $("++" !"=")

@@ -9,39 +9,106 @@ function check(tree, error)
     {
         case CONST_DEF:
         case VAR_DEF:
-            if (isVoidType(tree.type))
+            if (is(tree.type, VOID_TYPE))
                 error("Void type cannot be specified for constants and variables")
-            if (isGenericParamType(tree.type))
+            if (is(tree.type, GENERIC_PARAM_TYPE))
                 error("Generic parameters cannot be used in constants and variables")
             break;
 
         case TYPE_DEF:
         case ALIAS_DEF:
-            if (isGenericParamType(tree.type))
+            if (is(tree.type, GENERIC_PARAM_TYPE))
                 error("Generic parameters cannot be used in type definitions")
             break;
 
         case CALL:
-            checkFunction(tree.fun, error)
+            checkFunctionCall(tree.fun, error)
             break;
 
         case FUN_DEF:
-            if (tree.kind === "sub" && tree.returnType !== null)
-                error("Subroutines cannot have a return type")
+            if (tree.kind === "sub" && !is(tree.returnType, VOID_TYPE))
+                error("Subroutines should have a void return type")
+            if (tree.params.length === 0 && tree.name !== "new")
+                error("Functions always have a parameter (can be void)")
+            for (let i = 1; i < tree.params.length; i++)
+                if (is(tree.params[i].type, VOID_TYPE))
+                    error("Void type is only allowed for the first parameter")
     }
 
     return tree
 }
 
-function checkFunction(node, error)
+function fixFunction(f, error)
+{
+    if (is(f.body, CASE) && f.body.key === undefined) {
+        const paramNames = f.params.flatMap(p => p.names).filter(n => n !== "")
+        if (paramNames.length === 0)
+            error("No parameter to be matched")
+        else if (paramNames.length === 1)
+            f.body.key = leaf(VALUE_BY_NAME, {
+                name: paramNames[0],
+                namespace: []
+            }, error)
+    else
+        f.body.key = leaf(TUPLE, {
+            values: paramNames.map(n =>
+                leaf(VALUE_BY_NAME ,{
+                name: n,
+                    namespace: []
+                }, error)
+            )
+        }, error)
+    }
+    if (f.kind !== "enum")
+        f.body = addLastReturn(f.body, error)
+}
+
+function addLastReturn(body, error)
+{
+    if (!isLeaf(body) || is(body, TYPE_DEF) || is(body, TRAIT_DEF) || is(body, ALIAS_DEF)
+        || is(body, VAR_DEF) || is(body, FUN_DEF) || is(body, RETURN))
+        return body
+
+    if (is(body, CODE_BLOCK) || is(body, WISE_BLOCK)) {
+        if (body.statements.length > 0)
+        {
+            const last = body.statements[body.statements.length-1]
+            if (is(last, CODE_BLOCK) || is(last, WISE_BLOCK) ||
+                is(last, TERNARY) || is(last, CASE))
+            {
+                addLastReturn(last, error)
+            }
+            else
+            {
+                body.statements[body.statements.length-1] = addLastReturn(last, error)
+            }
+        }
+    }
+    else if (is(body, TERNARY))
+    {
+        body.ifTrue = addLastReturn(body.ifTrue, error)
+        body.ifFalse = addLastReturn(body.ifFalse, error)
+    }
+    else if (is(body, CASE))
+    {
+        body.cases.forEach(c => c.value = addLastReturn(c.value, error))
+    }
+    else if (!is(body, TYPE_DEF) && !is(body, TRAIT_DEF) && !is(body, ALIAS_DEF)
+        && !is(body, VAR_DEF) && !is(body, FUN_DEF) && !is(body, RETURN))
+        return leaf(RETURN, { value: body }, error)
+
+    return body
+}
+
+function checkFunctionCall(node, error)
 {
     if (!isLeaf(node))
         return
 
-    if (isNodeOf(node, TUPLE))
-        node.values.forEach(value => checkFunction(value, error))
+    if (is(node, TUPLE))
+        node.values.forEach(value => checkFunctionCall(value, error))
 
-    if ([VOID_VALUE, STRING_VALUE, LIST, SET, REC_VALUE,
+    if ([VOID_VALUE, STRING_VALUE, LIST, SET, REC_VALUE, CREATE_OBJECT,
          INTEGER, FLOAT, DICT_VALUE, BOOLEAN, LINKED_LIST].includes(node._))
         error(capitalFirst(leafName[node._]) + " cannot be used as a function")
 }
@@ -84,17 +151,7 @@ function isLeaf(tree)
     return tree !== null && typeof tree === 'object' && tree._
 }
 
-function isVoidType(tree)
-{
-    return isNodeOf(tree, VOID_TYPE)
-}
-
-function isGenericParamType(tree)
-{
-    return isNodeOf(tree, GENERIC_PARAM_TYPE)
-}
-
-function isNodeOf(tree, kind)
+function is(tree, kind)
 {
     if (!isLeaf(tree))
         return false
@@ -133,12 +190,10 @@ const TUPLE_TYPE = "TUPLE_TYPE"
 const TUPLE_POWER_TYPE = "TUPLE_POWER_TYPE"
 const OPTION_TYPE = "OPTION_TYPE"
 const LIST_TYPE = "LIST_TYPE"
-const ENUM_TYPE = "ENUM_TYPE"
 const SET_TYPE = "SET_TYPE"
 const DICT_TYPE = "DICT_TYPE"
 const REC_TYPE = "REC_TYPE"
-const REC_MEMBER_TYPE = "REC_MEMBER_TYPE"
-const NAMED_TYPE = "NAMED_TYPE"
+const REC_FIELD_TYPE = "REC_FIELD_TYPE"
 const GENERIC_PARAM_TYPE = "GENERIC_PARAM_TYPE"
 const ANY_TYPE = "ANY_TYPE"
 const DISJUNCTION = "DISJUNCTION"
@@ -158,7 +213,7 @@ const VALUE_BY_NAME = "VALUE_BY_NAME"
 const TYPE_BY_NAME = "TYPE_BY_NAME"
 const TUPLE = "TUPLE"
 const REC_VALUE = "REC_VALUE"
-const REC_MEMBER_VALUE = "REC_MEMBER_VALUE"
+const REC_FIELD_VALUE = "REC_FIELD_VALUE"
 const STRING_VALUE = "STRING_VALUE"
 const STRING_PART = "STRING_PART"
 const FORMATTED_VALUE = "FORMATTED_VALUE"
@@ -196,8 +251,8 @@ const RESUME = "RESUME"
 const LINKED_LIST = "LINKED_LIST"
 const LINKED_LIST_TYPE = "LINKED_LIST_TYPE"
 const EMPTY_LINKED_LIST = "EMPTY_LINKED_LIST"
-const WISE_BLOCK = "WITH_BLOCK"
-const GET_WISE_MEMBER = "GET_WITH_MEMBER"
+const WISE_BLOCK = "WISE_BLOCK"
+const GET_WISE_MEMBER = "GET_WISE_MEMBER"
 const CARTESIAN_PROD = "CARTESIAN_PROD"
 const CARTESIAN_POWER = "CARTESIAN_POWER"
 const PROP_DEF = "PROP_DEF"
@@ -214,6 +269,8 @@ const TRAIT_INTER = "TRAIT_INTER"
 const TRAIT_DEF = "TRAIT_DEF"
 const TRAIT_CONSTRAINT = "TRAIT_CONSTRAINT"
 const CREATE_OBJECT = "CREATE_OBJECT"
+const COMPARISON_PATTERN = "COMPARISON_PATTERN"
+const ABSTRACT_BODY = "ABSTRACT_BODY"
 
 leafName = {
     MODULE: "module",
@@ -237,12 +294,10 @@ leafName = {
     TUPLE_POWER_TYPE: "tuple power type",
     OPTION_TYPE: "option type",
     LIST_TYPE: "list type",
-    ENUM_TYPE: "enumeration type",
     SET_TYPE: "set type",
     DICT_TYPE: "dictionary type",
     REC_TYPE: "record type",
-    REC_MEMBER_TYPE: "record member type",
-    NAMED_TYPE: "named type",
+    REC_FIELD_TYPE: "record field type",
     GENERIC_PARAM_TYPE: "generic parameter type",
     ANY_TYPE: "any type",
     DISJUNCTION: "disjunction",
@@ -263,7 +318,7 @@ leafName = {
     TYPE_BY_NAME: "type by name",
     TUPLE: "tuple",
     REC_VALUE: "record value",
-    REC_MEMBER_VALUE: "record member value",
+    REC_FIELD_VALUE: "record field value",
     STRING_VALUE: "string value",
     STRING_PART: "string part",
     FORMATTED_VALUE: "formatted value",
@@ -317,14 +372,17 @@ leafName = {
     TRAIT_INTER: "trait intersection",
     TRAIT_DEF: "trait definition",
     TRAIT_CONSTRAINT: "trait constraint",
-    CREATE_OBJECT: "object creation"
+    CREATE_OBJECT: "object creation",
+    COMPARISON_PATTERN: "comparison pattern",
+    ABSTRACT_BODY: "abstract body"
 }
 
 module.exports = {
     leaf,
+    isLeaf,
     getLambdaVariables,
-    isNodeOf,
-    isVoidType,
+    fixFunction,
+    is,
     MODULE,
     CONST_DEF,
     VAR_DEF,
@@ -346,12 +404,10 @@ module.exports = {
     TUPLE_POWER_TYPE,
     OPTION_TYPE,
     LIST_TYPE,
-    ENUM_TYPE,
     SET_TYPE,
     DICT_TYPE,
     REC_TYPE,
-    REC_MEMBER_TYPE,
-    NAMED_TYPE,
+    REC_FIELD_TYPE,
     GENERIC_PARAM_TYPE,
     ANY_TYPE,
     DISJUNCTION,
@@ -372,7 +428,7 @@ module.exports = {
     TYPE_BY_NAME,
     TUPLE,
     REC_VALUE,
-    REC_MEMBER_VALUE,
+    REC_FIELD_VALUE,
     STRING_VALUE,
     STRING_PART,
     FORMATTED_VALUE,
@@ -426,5 +482,7 @@ module.exports = {
     TRAIT_INTER,
     TRAIT_DEF,
     TRAIT_CONSTRAINT,
-    CREATE_OBJECT
+    CREATE_OBJECT,
+    COMPARISON_PATTERN,
+    ABSTRACT_BODY
 };
