@@ -308,7 +308,7 @@ ternary
     = __ "?" __ ifTrue:(branch / inlineBlock / return) ifFalse:(__ "else" __ v:(branch / inlineBlock / return) { return v })?
         { return tree.leaf(tree.TERNARY, { ifTrue, ifFalse }, error) }
 case
-    = _ ("case" _ / eol pipe _) c:caseBody { return c }
+    = _ (_ pipe _ / eol pipe _) c:caseBody { return c }
 
 inlineBlock
     = "{" !(([-+&*^] / [><] "="? / "!=") "}") __ statements:funStatements __ "}"
@@ -1112,7 +1112,7 @@ eol = ([ \t] / comment)* "\r"? "\n" __
 keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return" / "yield" / "state"
     / "new" / "const" / "init" / "base" / "prop" / "me" / "with"
     / "type" / "any" / "enum" / "set" / "dict" / "yes" / "no" / "trait" / "alias"
-    / "wise" / "else" / "while" / "iter" / "for" / "next" / "break" / "case" / "other" / "when" / "resume"
+    / "wise" / "else" / "while" / "iter" / "for" / "next" / "break" / "other" / "when" / "resume"
     / "in" / "by" / "or" / "xor" / "global" / "async" / "defer") ![A-Za-z0-9_]
 
 assignmentOp = ":=" / "*=" / "/=" / "%=" / "+=" / "-=" / "++="

@@ -200,7 +200,7 @@ fun list "foldr" acc f => list
 
 fun list "sumList" => list foldr 0 (+)
 
-(2, 3) case (@x, @y) -> x + y
+(2, 3) | (@x, @y) -> x + y
 (2, 3)
 | (@x, @y) -> x + y
 
