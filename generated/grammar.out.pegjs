@@ -318,7 +318,7 @@ inlineBlock
 
 caseBody
     = hd:caseOption tl:(__ pipe _ o:caseOption { return o })*
-    otherValue:(__ "other" __ value:(branch / inlineBlock / return) { return value })? {
+    otherValue:(__ "-->" __ value:(branch / inlineBlock / return) { return value })? {
         var cases = [hd].concat(tl)
         if (otherValue)
             cases.push(tree.leaf(tree.CASE_OPTION, {
@@ -1112,7 +1112,7 @@ eol = ([ \t] / comment)* "\r"? "\n" __
 keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return" / "yield" / "state"
     / "new" / "const" / "init" / "base" / "prop" / "me" / "with"
     / "type" / "any" / "enum" / "set" / "dict" / "yes" / "no" / "trait" / "alias"
-    / "wise" / "else" / "while" / "iter" / "for" / "next" / "break" / "other" / "when" / "resume"
+    / "wise" / "else" / "while" / "iter" / "for" / "next" / "break" / "when" / "resume"
     / "in" / "by" / "or" / "xor" / "global" / "async" / "defer") ![A-Za-z0-9_]
 
 assignmentOp = ":=" / "*=" / "/=" / "%=" / "+=" / "-=" / "++="

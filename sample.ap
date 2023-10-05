@@ -65,8 +65,7 @@ fun a Concatenable & Countable "*" count int do
         count
         | 0 -> ""
         | 1 -> a
-        other
-            a ++ a * (count - 1)
+        --> a ++ a * (count - 1)
 end
 
 trait Addable (+) {
@@ -176,7 +175,7 @@ fun shape "area"
     | #rectangle(@width float, @height float) -> width * height
     | #circle(inputData computeRadius) -> knownArea
     | #circle @radius float -> radius ^ 2 * 3.14
-    | _ -> 0    // Default or unrecognized shape
+    --> 0    // Default or unrecognized shape
 
 // conditions inside a function
 
@@ -227,7 +226,7 @@ while i < 10 {
 fun list "has" element =>
     list index element
     | #none -> no
-    other yes
+    --> yes
 
 var _locales dict{str? -> any} = dict{ }
 state fun identifier "locale" do
@@ -269,12 +268,12 @@ fun n int "factorial" =>
     else
         n
         | 0, 1 -> 1
-        other n * ((n - 1) factorial)
+        --> n * ((n - 1) factorial)
 
 fun n int "factorial"
     | < 0 -> #err "Expecting positive number"
     | in 0..=1 -> 1
-    other n * ((n - 1) factorial)
+    --> n * ((n - 1) factorial)
 
 fun list [[@T]] "flat": [@T] =>
     list reduce (++)
@@ -464,7 +463,7 @@ fun n @T "getNumbersEnum" =>
 var myEnum int-enum = 5 getNumbersEnum
 iter () myEnum.fetch
     | #ok @i -> { "Number {i}" print. next }
-    other break
+    --> break
 () myEnum.close
 
 // Range from low to high excluded
@@ -519,4 +518,4 @@ fun x @T "insert" root @T-tree: @T-tree => root
 | #node (@y, @left, @right) -> x
   | < y -> #node (y, x insert left, right)
   | > y -> #node (y, left, x insert right)
-  other #node (x, left, right)
+  --> #node (x, left, right)
