@@ -356,7 +356,9 @@ mapJS = {
     },
     MUTABLE_PARAM: (leaf) => "{ ref: " + toJS(leaf.value) + " }",
     WHILE: (leaf) => "while (" + toJS(leaf.condition) + ") " + toJS(leaf.body),
-    ITER: (leaf) => "while (true) " + toJS(leaf.body),
+    ITER: (leaf) => {
+        return "while (true) {\n" + indent(toJS(leaf.body) + "\nbreak") + "\n}"
+    },
     NEXT: () => "continue",
     BREAK: () => "break",
     RANGE: (leaf) => "range(\"" + leaf.op + "\", " +
