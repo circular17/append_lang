@@ -355,12 +355,15 @@ mapJS = {
         }
     },
     MUTABLE_PARAM: (leaf) => "{ ref: " + toJS(leaf.value) + " }",
-    WHILE: (leaf) => "while (" + toJS(leaf.condition) + ") " + toJS(leaf.body),
+    WHILE: (leaf) =>
+        (leaf.label ? leaf.label + ": " : "") +
+        "while (" + toJS(leaf.condition) + ") " + toJS(leaf.body),
     ITER: (leaf) => {
-        return "while (true) {\n" + indent(toJS(leaf.body) + "\nbreak") + "\n}"
+        return (leaf.label ? leaf.label + ": " : "") +
+            "while (true) {\n" + indent(toJS(leaf.body) + "\nbreak") + "\n}"
     },
-    NEXT: () => "continue",
-    BREAK: () => "break",
+    NEXT: (leaf) => "continue" + (leaf.label ? " " + leaf.label : ""),
+    BREAK: (leaf) => "break" + (leaf.label ? " " + leaf.label : ""),
     RANGE: (leaf) => "range(\"" + leaf.op + "\", " +
         ([leaf.first, leaf.lastOrCount].concat(leaf.step ? [leaf.step] : [])).map(toJS).join(", ") + ")",
     MODIFY_REC: (leaf) => "{ ..." + toBracketJS(leaf.record) +
@@ -417,7 +420,8 @@ mapJS = {
     },
     ABSTRACT_BODY: () => { return "/* abstract */" },
     FOR_EACH: (leaf) => {
-        return "for (const " + leaf.variable + " of " + toJS(leaf.key) + ") " + toJS(leaf.body)
+        return (leaf.label ? leaf.label + ": " : "") +
+            "for (const " + leaf.variable + " of " + toJS(leaf.key) + ") " + toJS(leaf.body)
     }
 }
 

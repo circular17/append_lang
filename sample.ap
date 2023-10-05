@@ -504,7 +504,7 @@ fun fileName "readFile": str with io do
 end
 
 enum filename "getLines": str with io do
-    var file = filename openFile
+    var file = filename io.openFile
     while file !eof
         yield file readLine
     file close

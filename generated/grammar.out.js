@@ -350,7 +350,7 @@ function peg$parse(input, options) {
       peg$c146 = function(body) {
               const variable = tree.getLoopVariable()
               body.key = tree.leaf(tree.VALUE_BY_NAME, { name: variable, namespace: [] }, error)
-              return tree.leaf(tree.FOR_EACH, { variable, body }, error)
+              return tree.leaf(tree.FOR_EACH, { variable, body, label: variable }, error)
           },
       peg$c147 = "wise",
       peg$c148 = peg$literalExpectation("wise", false),

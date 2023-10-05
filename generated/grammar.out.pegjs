@@ -262,7 +262,7 @@ for
     / _ "for" body:case {
         const variable = tree.getLoopVariable()
         body.key = tree.leaf(tree.VALUE_BY_NAME, { name: variable, namespace: [] }, error)
-        return tree.leaf(tree.FOR_EACH, { variable, body }, error)
+        return tree.leaf(tree.FOR_EACH, { variable, body, label: variable }, error)
     }
 
 optionNoPipe

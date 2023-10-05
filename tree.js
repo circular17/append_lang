@@ -13,17 +13,17 @@ function check(tree, error)
                 error("Void type cannot be specified for constants and variables")
             if (is(tree.type, GENERIC_PARAM_TYPE))
                 error("Generic parameters cannot be used in constants and variables")
-            break;
+            break
 
         case TYPE_DEF:
         case ALIAS_DEF:
             if (is(tree.type, GENERIC_PARAM_TYPE))
                 error("Generic parameters cannot be used in type definitions")
-            break;
+            break
 
         case CALL:
             checkFunctionCall(tree.fun, error)
-            break;
+            break
 
         case FUN_DEF:
             if (tree.kind === "sub" && !is(tree.returnType, VOID_TYPE))
@@ -33,9 +33,51 @@ function check(tree, error)
             for (let i = 1; i < tree.params.length; i++)
                 if (is(tree.params[i].type, VOID_TYPE))
                     error("Void type is only allowed for the first parameter")
+            break
+
+        case FOR_EACH:
+        case ITER:
+        case WHILE:
+            let needLabel = false
+            findContinueBreak(tree.body, () => needLabel = true)
+            if (needLabel)
+            {
+                if (!tree.label)
+                    tree.label = getLoopVariable()
+                findContinueBreak(tree.body, (node) => node.label = tree.label)
+            }
     }
 
     return tree
+}
+
+function findContinueBreak(tree, callback) {
+    if (Array.isArray(tree))
+    {
+        for (const item of tree)
+            findContinueBreak(item, callback)
+        return
+    }
+
+    if (!isLeaf(tree))
+        return
+
+    switch (tree._)
+    {
+        case FOR_EACH:
+        case ITER:
+        case WHILE:
+            return
+
+        case BREAK:
+        case NEXT:
+            callback(tree)
+            break
+
+        default:
+            for (const prop in tree)
+                findContinueBreak(tree[prop], callback)
+    }
 }
 
 function fixFunction(f, error)
