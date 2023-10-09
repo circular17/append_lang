@@ -382,7 +382,7 @@ mapJS = {
     },
     WISE_BLOCK: (leaf) => {
         return "{\n" +
-            indent("$ = " + toJS(leaf.key) + "\n" +
+            indent("const $ = " + toJS(leaf.key) + "\n" +
             leaf.statements.map(s => toJS(s)).join("\n"))
             + "\n}"
     },
