@@ -9,7 +9,7 @@ function transpile(code)
     try
     {
         const parsed = grammar.parse(code)
-
+        
         console.log(toJS(parsed))
         //debug.dump(parsed)
     }
@@ -110,6 +110,42 @@ function transpileType(type) {
     return escapeJS(toJS(type))
 }
 
+function addLabelToLoopIfNeeded(leaf) {
+    let needLabel = false
+    tree.findContinueBreak(leaf.body, () => needLabel = true)
+    if (needLabel && !leaf.label)
+        leaf.label = getLoopLabel()
+}
+
+let _loopLabelCounter = 0
+function getLoopLabel()
+{
+    _loopLabelCounter += 1
+    return "__" + _loopLabelCounter
+}
+
+let _tempVariableCounter = 0
+function getTempVariable()
+{
+    _tempVariableCounter += 1
+    return "$" + _tempVariableCounter
+}
+
+function endsWithJump(leaf)
+{
+    if (tree.is(leaf, tree.NEXT) ||
+        tree.is(leaf, tree.BREAK) ||
+        tree.is(leaf, tree.RETURN))
+        return true
+    else if (tree.is(leaf, tree.CODE_BLOCK)) {
+        return leaf.statements.length > 0 &&
+            endsWithJump(leaf.statements[leaf.statements.length - 1])
+    }
+    else
+        return false
+}
+
+
 mapJS = {
     MODULE: (leaf) => {
         return leaf.statements.map(statement => toJS(statement)).join("\n")
@@ -120,11 +156,11 @@ mapJS = {
             result += "/* " + toJS(leaf.type) + " */ "
         if (tree.is(leaf.names, tree.NAMES))
         {
-            result += leaf.names.identifiers.join(" = ")
+            result += leaf.names.identifiers.map(id => toJS(id)).join(" = ")
         }
         else
             result += toJS(leaf.names)
-        return result + " = " + toJS(leaf.value)
+        return result + (leaf.value ? " = " + toJS(leaf.value) : "")
     },
     VAR_DEF: (leaf) => {
         let result = "let "
@@ -132,7 +168,7 @@ mapJS = {
             result += "/* " + toJS(leaf.type) + " */ "
         if (tree.is(leaf.names, tree.NAMES))
         {
-            result += leaf.names.identifiers.join(" = ")
+            result += leaf.names.identifiers.map(id => toJS(id)).join(" = ")
         }
         else
             result += toJS(leaf.names)
@@ -141,6 +177,11 @@ mapJS = {
         else
             result += " /* not defined */"
         return result
+    },
+    IDENTIFIER: (leaf) => {
+        if (leaf.name === null)
+            leaf.name = getTempVariable()
+        return leaf.name
     },
     DECONSTRUCT_TUPLE: (leaf) => {
         return "[" + leaf.elements.map(element => toJS(element)).join(", ") + "]"
@@ -158,8 +199,12 @@ mapJS = {
         return leaf.name
     },
     FUN_DEF: (leaf) => {
-        let params = "(" + leaf.params.map(p => toJS(p)).join(", ") + ")"
-        if (leaf.effects && leaf.effects.length > 0) params += " /* effects */"
+        let params = 
+            leaf.params.length === 1 && tree.is(leaf.params[0].type, tree.VOID_TYPE) 
+            ? "()"
+            : "(" + leaf.params.map(p => toJS(p)).join(", ") + ")"
+        params += " /*: " + toJS(leaf.returnType) + " */"
+        if (leaf.effects && leaf.effects.length > 0) params += " /* with effects */"
         let body = toJS(leaf.body)
         let result
         if (leaf.name !== null || leaf.kind === "enum")
@@ -176,7 +221,7 @@ mapJS = {
         return result
     },
     FUN_PARAM_DEF: (leaf) => {
-        return "/* " + toJS(leaf.type) + " */ " + leaf.names.join(", ")
+        return "/* " + toJS(leaf.type) + " */ " + leaf.names.map(n => toJS(n)).join(", ")
     },
     INLINE_ENUM: (leaf) => {
         let body = toJS(leaf.body)
@@ -208,10 +253,10 @@ mapJS = {
     REC_FIELD_TYPE: (leaf) => {
         if (leaf.modifier === "base")
             return leaf.modifier + " " +
-                leaf.names.join("/") + " = " + toJS(leaf.defaultValue)
+                leaf.names.map(n => toJS(n)).join("/") + " = " + toJS(leaf.defaultValue)
         else
             return (leaf.modifier ? leaf.modifier + " " : "") +
-                leaf.names.join("/") + " " + toJS(leaf.type) +
+                leaf.names.map(n => toJS(n)).join("/") + " " + toJS(leaf.type) +
                 (leaf.defaultValue ? ": " + toJS(leaf.defaultValue) : "")
     },
     GENERIC_PARAM_TYPE: (leaf) => "@" + leaf.name,
@@ -259,6 +304,9 @@ mapJS = {
     },
     TYPE_BY_NAME: (leaf) => {
         return leaf.namespace.map(n => n+".").join("") + leaf.name
+    },
+    RESOLVED_VARIABLE: (leaf) => {
+        return toJS(leaf.ref)
     },
     TUPLE: (leaf) => {
         return "/* tup */[" + leaf.values.map(value => toJS(value)).join(", ") + "]"
@@ -310,7 +358,7 @@ mapJS = {
             ? leaf.value.statements.map(s => toJS(s)).join("\n")
             : toJS(leaf.value)
         return leaf.patterns.map(pattern => "case " + toJS(pattern) + ":\n").join("") +
-            indent(value + "\nbreak")
+            indent(value + (!endsWithJump(leaf.value) ? "\nbreak" : ""))
     },
     CAPTURE: (leaf) => (leaf.type ? "/* " + toJS(leaf.type) + " */ " : "") + leaf.name,
     TAGGED_VALUE: (leaf) => {
@@ -326,7 +374,15 @@ mapJS = {
         return "yield* " + toJS(leaf.enumerator)
     },
     CALL: (leaf) => {
-        return toJS(leaf.fun) + "(" + leaf.params.map(p => toJS(p)).join(", ") + ")"
+        if (leaf.params.length === 1 && tree.is(leaf.params[0], tree.VOID_VALUE))
+            return toJS(leaf.fun) + "()"
+        else
+        /*if (leaf.params.some(p => tree.is(p, tree.MUTABLE_PARAM)))
+        {
+
+        }
+        else*/
+            return toJS(leaf.fun) + "(" + leaf.params.map(p => toJS(p)).join(", ") + ")"
     },
     INTEGER: (leaf) => {
         return leaf.value + "n"
@@ -355,15 +411,21 @@ mapJS = {
         }
     },
     MUTABLE_PARAM: (leaf) => "{ ref: " + toJS(leaf.value) + " }",
-    WHILE: (leaf) =>
-        (leaf.label ? leaf.label + ": " : "") +
-        "while (" + toJS(leaf.condition) + ") " + toJS(leaf.body),
-    ITER: (leaf) => {
+    WHILE: (leaf) => {
+        addLabelToLoopIfNeeded(leaf)
         return (leaf.label ? leaf.label + ": " : "") +
-            "while (true) {\n" + indent(toJS(leaf.body) + "\nbreak") + "\n}"
+            "while (" + toJS(leaf.condition) + ") " + toJS(leaf.body)
     },
-    NEXT: (leaf) => "continue" + (leaf.label ? " " + leaf.label : ""),
-    BREAK: (leaf) => "break" + (leaf.label ? " " + leaf.label : ""),
+    ITER: (leaf) => {
+        addLabelToLoopIfNeeded(leaf)
+        return (leaf.label ? leaf.label + ": " : "") +
+            "while (true) {\n" + 
+                indent(toJS(leaf.body) + 
+                "\nbreak" + (leaf.label ? " " + leaf.label : "")) + 
+            "\n}"
+    },
+    NEXT: (leaf) => "continue" + (leaf.loop ? " " + leaf.loop.label : ""),
+    BREAK: (leaf) => "break" + (leaf.loop ? " " + leaf.loop.label : ""),
     RANGE: (leaf) => "range(\"" + leaf.op + "\", " +
         ([leaf.first, leaf.lastOrCount].concat(leaf.step ? [leaf.step] : [])).map(toJS).join(", ") + ")",
     MODIFY_REC: (leaf) => "{ ..." + toBracketJS(leaf.record) +
@@ -420,8 +482,9 @@ mapJS = {
     },
     ABSTRACT_BODY: () => { return "/* abstract */" },
     FOR_EACH: (leaf) => {
+        addLabelToLoopIfNeeded(leaf)
         return (leaf.label ? leaf.label + ": " : "") +
-            "for (const " + leaf.variable + " of " + toJS(leaf.key) + ") " + toJS(leaf.body)
+            "for (" + toJS(leaf.variable) + " of " + toJS(leaf.key) + ") " + toJS(leaf.body)
     }
 }
 

@@ -38,14 +38,7 @@ function check(tree, error)
         case FOR_EACH:
         case ITER:
         case WHILE:
-            let needLabel = false
-            findContinueBreak(tree.body, () => needLabel = true)
-            if (needLabel)
-            {
-                if (!tree.label)
-                    tree.label = getLoopVariable()
-                findContinueBreak(tree.body, (node) => node.label = tree.label)
-            }
+            findContinueBreak(tree.body, (node) => node.loop = tree)
     }
 
     return tree
@@ -83,23 +76,20 @@ function findContinueBreak(tree, callback) {
 function fixFunction(f, error)
 {
     if (is(f.body, CASE) && f.body.key === undefined) {
-        const paramNames = f.params.flatMap(p => p.names).filter(n => n !== "")
-        if (paramNames.length === 0)
-            error("No parameter to be matched")
-        else if (paramNames.length === 1)
-            f.body.key = leaf(VALUE_BY_NAME, {
-                name: paramNames[0],
-                namespace: []
-            }, error)
-    else
-        f.body.key = leaf(TUPLE, {
-            values: paramNames.map(n =>
-                leaf(VALUE_BY_NAME ,{
-                name: n,
-                    namespace: []
-                }, error)
+        const params = f.params.filter(p => !is(p.type, VOID_TYPE))
+            .flatMap(p =>
+                p.names.map(
+                    n => leaf(RESOLVED_VARIABLE, { ref: n }, error)
+                )
             )
-        }, error)
+        if (params.length === 0)
+            error("No parameter to be matched")
+        else if (params.length === 1)
+            f.body.key = params[0]
+        else
+            f.body.key = leaf(TUPLE, {
+                values: params
+            }, error)
     }
     if (f.kind === "fun")
         f.body = addLastReturn(f.body, error)
@@ -153,13 +143,6 @@ function checkFunctionCall(node, error)
     if ([VOID_VALUE, STRING_VALUE, LIST, SET, REC_VALUE, CREATE_OBJECT,
          INTEGER, FLOAT, DICT_VALUE, BOOLEAN, LINKED_LIST].includes(node._))
         error(capitalFirst(leafName[node._]) + " cannot be used as a function")
-}
-
-let _loopVariableCounter = 0
-function getLoopVariable()
-{
-    _loopVariableCounter += 1
-    return "__" + _loopVariableCounter
 }
 
 function capitalFirst(text)
@@ -222,6 +205,7 @@ const MODULE = "MODULE"
 const CONST_DEF = "CONST_DEF"
 const VAR_DEF = "VAR_DEF"
 const NAMES = "NAMES"
+const IDENTIFIER = "IDENTIFIER"
 const DECONSTRUCT_TUPLE = "DECONSTRUCT_TUPLE"
 const DECONSTRUCT_RECORD = "DECONSTRUCT_RECORD"
 const DECONSTRUCT_MEMBER = "DECONSTRUCT_MEMBER"
@@ -260,6 +244,7 @@ const EXPONENTIATION = "EXPONENTIATION"
 const INDEXING = "INDEXING"
 const VALUE_BY_NAME = "VALUE_BY_NAME"
 const TYPE_BY_NAME = "TYPE_BY_NAME"
+const RESOLVED_VARIABLE = "RESOLVED_VARIABLE"
 const TUPLE = "TUPLE"
 const REC_VALUE = "REC_VALUE"
 const REC_FIELD_VALUE = "REC_FIELD_VALUE"
@@ -327,6 +312,7 @@ leafName = {
     CONST_DEF: "constant definition",
     VAR_DEF: "variable definition",
     NAMES: "names",
+    IDENTIFIER: "identifier",
     DECONSTRUCT_TUPLE: "tuple deconstruction",
     DECONSTRUCT_RECORD: "record deconstruction",
     DECONSTRUCT_MEMBER: "record member deconstruction",
@@ -366,6 +352,7 @@ leafName = {
     COMPOSE: "composition",
     VALUE_BY_NAME: "value by name",
     TYPE_BY_NAME: "type by name",
+    RESOLVED_VARIABLE: "resolved variable",
     TUPLE: "tuple",
     REC_VALUE: "record value",
     REC_FIELD_VALUE: "record field value",
@@ -432,13 +419,14 @@ module.exports = {
     leaf,
     isLeaf,
     getLambdaVariables,
-    getLoopVariable,
+    findContinueBreak,
     fixFunction,
     is,
     MODULE,
     CONST_DEF,
     VAR_DEF,
     NAMES,
+    IDENTIFIER,
     DECONSTRUCT_TUPLE,
     DECONSTRUCT_RECORD,
     DECONSTRUCT_MEMBER,
@@ -478,6 +466,7 @@ module.exports = {
     COMPOSE,
     VALUE_BY_NAME,
     TYPE_BY_NAME,
+    RESOLVED_VARIABLE,
     TUPLE,
     REC_VALUE,
     REC_FIELD_VALUE,

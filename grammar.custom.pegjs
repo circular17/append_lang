@@ -45,7 +45,7 @@ var
     / names:(names / deconstruct) _ type:type _ v:("=" _ v:branch => v)?
         => #VAR_DEF { names, type, value: v }
 
-names = i:identifiers => #NAMES { identifiers:i }
+names = i:identifiers => #NAMES { identifiers: i }
 
 deconstruct
     = "(" __ hd:deconstructElement tl:(_ "," __ e:deconstructElement => e)* __ ")"
@@ -182,7 +182,7 @@ funParam
         }
     / void
         => #FUN_PARAM_DEF {
-            names:["void"],
+            names:[#VOID_VALUE {}],
             type: #VOID_TYPE {},
             mutable: false
         }
@@ -258,11 +258,16 @@ optionWithPipe
 
 for
     = _ "for" _ "@" _ variable:id __ body:loopBody
-        => #FOR_EACH { variable, body }
+        => #FOR_EACH { 
+            variable: #VALUE_BY_NAME { name: variable, namespace: [] }, 
+            body
+        }
     / _ "for" body:case {
-        const variable = tree.getLoopVariable()
-        body.key = #VALUE_BY_NAME { name: variable, namespace: [] }
-        return #FOR_EACH { variable, body, label: variable }
+        const variableId = #IDENTIFIER { name: null }
+        const variableName = #NAMES { identifiers: [variableId] }
+        const variableDef = #CONST_DEF { names: variableName, type: null, value: null }
+        body.key = #RESOLVED_VARIABLE { ref: variableId }
+        return #FOR_EACH { variable: variableDef, body }
     }
 
 optionNoPipe
@@ -607,7 +612,7 @@ lambda
             name: null,
             params: tree.getLambdaVariables(value).toSorted().map(name =>
                 #FUN_PARAM_DEF {
-                    names: [name],
+                    names: [#IDENTIFIER { name }],
                     type: #ANY_TYPE {},
                     mutable: false
                 }),
@@ -1076,8 +1081,9 @@ tag
 /************* TOKENS *************/
 
 identifiers
-    = hd:id tl:(_ "/" __ id:id => id)*
-        => hd::tl
+    = hd:id tl:(_ "/" __ id:id => id)* {
+        return (hd::tl).map(id => #IDENTIFIER { name: id }) 
+    }
 
 id = $(!keyword "_"? [A-Za-z] [A-Za-z0-9_]*)
 

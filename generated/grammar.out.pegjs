@@ -45,7 +45,7 @@ var
     / names:(names / deconstruct) _ type:type _ v:("=" _ v:branch { return v })?
         { return tree.leaf(tree.VAR_DEF, { names, type, value: v }, error) }
 
-names = i:identifiers { return tree.leaf(tree.NAMES, { identifiers:i }, error) }
+names = i:identifiers { return tree.leaf(tree.NAMES, { identifiers: i }, error) }
 
 deconstruct
     = "(" __ hd:deconstructElement tl:(_ "," __ e:deconstructElement { return e })* __ ")"
@@ -182,7 +182,7 @@ funParam
         }, error) }
     / void
         { return tree.leaf(tree.FUN_PARAM_DEF, {
-            names:["void"],
+            names:[tree.leaf(tree.VOID_VALUE, {}, error)],
             type: tree.leaf(tree.VOID_TYPE, {}, error),
             mutable: false
         }, error) }
@@ -258,11 +258,16 @@ optionWithPipe
 
 for
     = _ "for" _ "@" _ variable:id __ body:loopBody
-        { return tree.leaf(tree.FOR_EACH, { variable, body }, error) }
+        { return tree.leaf(tree.FOR_EACH, { 
+            variable: tree.leaf(tree.VALUE_BY_NAME, { name: variable, namespace: [] }, error), 
+            body
+        }, error) }
     / _ "for" body:case {
-        const variable = tree.getLoopVariable()
-        body.key = tree.leaf(tree.VALUE_BY_NAME, { name: variable, namespace: [] }, error)
-        return tree.leaf(tree.FOR_EACH, { variable, body, label: variable }, error)
+        const variableId = tree.leaf(tree.IDENTIFIER, { name: null }, error)
+        const variableName = tree.leaf(tree.NAMES, { identifiers: [variableId] }, error)
+        const variableDef = tree.leaf(tree.CONST_DEF, { names: variableName, type: null, value: null }, error)
+        body.key = tree.leaf(tree.RESOLVED_VARIABLE, { ref: variableId }, error)
+        return tree.leaf(tree.FOR_EACH, { variable: variableDef, body }, error)
     }
 
 optionNoPipe
@@ -607,7 +612,7 @@ lambda
             name: null,
             params: tree.getLambdaVariables(value).toSorted().map(name =>
                 tree.leaf(tree.FUN_PARAM_DEF, {
-                    names: [name],
+                    names: [tree.leaf(tree.IDENTIFIER, { name }, error)],
                     type: tree.leaf(tree.ANY_TYPE, {}, error),
                     mutable: false
                 }, error)),
@@ -1076,8 +1081,9 @@ tag
 /************* TOKENS *************/
 
 identifiers
-    = hd:id tl:(_ "/" __ id:id { return id })*
-        { return [hd].concat(tl) }
+    = hd:id tl:(_ "/" __ id:id { return id })* {
+        return ([hd].concat(tl)).map(id => tree.leaf(tree.IDENTIFIER, { name: id }, error)) 
+    }
 
 id = $(!keyword "_"? [A-Za-z] [A-Za-z0-9_]*)
 
