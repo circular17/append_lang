@@ -71,11 +71,10 @@ typeDefs // []
         => hd::tl
 
 traitDef
-    = traitConstraints:traitConstraints _ genericParams:genericParams _ name:id alias:(_ "(" o:overridableOp ")" => o)?
+    = genericParams:traitConstraints _ name:id alias:(_ "(" o:overridableOp ")" => o)?
     __ "{" __ features:features __ "}"
         => #TRAIT_DEF {
             name,
-            traitConstraints,
             genericParams,
             alias,
             features
@@ -108,16 +107,12 @@ traitInheritance
     = "..." parent:typeByName => #INHERITANCE { parent }
 
 typeDef
-    = traitConstraints:traitConstraints _ genericParams:genericParams _ name:typeId _ type:type
+    = genericParams:traitConstraints _ name:typeId _ type:type
         => #TYPE_DEF {
             name,
-            traitConstraints,
             genericParams,
             type
         }
-
-genericParams
-    = (i:typeId _ "-" => i)*
 
 aliasDef
     = genericParams:genericParams _ name:typeId _ "=" _ type:type
@@ -126,6 +121,9 @@ aliasDef
             genericParams,
             type
         }
+
+genericParams
+    = (i:typeId _ "-" => i)*
 
 explicitModuleBlock
     = "do" effects:effects? __ s:moduleStatements __ when:when? __ "end"
@@ -145,7 +143,7 @@ fun
 
 funHeader
     = isGlobal:isGlobal isAsync:isAsync purity:purity
-    kind:funKind _ traitConstraints:traitConstraints _ hd:funParam __ "\"" keywordName:$(keyword?) name:(id / overridableOp)? "\""
+    kind:funKind _ genericParams:traitConstraints _ hd:funParam __ "\"" keywordName:$(keyword?) name:(id / overridableOp)? "\""
     tl:(__ p:params => p)? returnType:(_ colon __ t:type => t)?
     effects:(__ "with" _ e:identifiers => e)? {
         if (keywordName)
@@ -158,7 +156,7 @@ funHeader
             purity,
             kind,
             name,
-            traitConstraints,
+            genericParams,
             params: [hd].concat(tl ?? []),
             effects: effects ?? [],
             returnType: returnType ?? (kind === "sub" ? #VOID_TYPE {}: #ANY_TYPE {})
@@ -506,14 +504,13 @@ traitIntersection
     }
 
 specializeType
-    = hd:(genericParamType / linkedListType) tl:(_ "-" __ t:(genericParamType / linkedListType) => t)* {
+    = hd:linkedListType tl:(_ "-" __ t:linkedListType => t)* {
         let types = hd::tl
         if (types.length > 1)
             return #SPECIALIZE_TYPE { base: types.pop(), params: types }
         else
             return hd
     }
-genericParamType = "@" id:id => #GENERIC_PARAM_TYPE { name: id }
 
 linkedListType = elementType:atomicType tail:(_ "<>")? {
         if (tail)
@@ -524,7 +521,6 @@ linkedListType = elementType:atomicType tail:(_ "<>")? {
 
 atomicType
     = anyType
-    / traitAlias
     / listType
     / setType
     / dictType
@@ -610,6 +606,7 @@ lambda
             purity,
             kind: kind ?? "fun",
             name: null,
+            genericParams: [],
             params: tree.getLambdaVariables(value).toSorted().map(name =>
                 #FUN_PARAM_DEF {
                     names: [#IDENTIFIER { name }],
@@ -619,14 +616,14 @@ lambda
             body: value,
             returnType: kind === "sub" ? #VOID_TYPE {} : #ANY_TYPE {}
         }
-    / isAsync:isAsync purity:purity kind:("sub" / colon) _ traitConstraints:traitConstraints _
+    / isAsync:isAsync purity:purity kind:("sub" / colon) _ genericParams:traitConstraints _
     params:params __ returnType:(colon _ t:type __ => t)? body:lambdaBody
         => #FUN_DEF {
              isAsync,
              purity,
              kind: kind === ":" ? "fun" : kind,
              name: null,
-             traitConstraints,
+             genericParams,
              params: params,
              body: body,
              returnType: returnType ?? (kind === "sub" ? #VOID_TYPE {} : #ANY_TYPE {})
@@ -651,6 +648,7 @@ constructor
             isAsync,
             kind: "fun",
             name: "new",
+            genericParams: [],
             params: [],
             body,
             returnType

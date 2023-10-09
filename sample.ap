@@ -24,10 +24,10 @@ var a/b = 5e10; c int = #none ?? 7; d int
 var number int | float | decimal = 5.4
 type vec2 float*float
 var point = #vec2 (12.5, 8)
-type<T (+) & (*)> T-point {| x T, y T |}
-type T-point3 {| ...T-point, z T |}
+type <T (+) & (*)> point {| x T, y T |}
+type <T> point3 {| ...T-point, z T |}
 var pointStruct = #float-point {| x: 3, y: 45.4 |}
-global fun p1 @T-point "+" p2 @T-point
+global fun <T> p1 T-point "+" p2 T-point
     => #T-point {| x: p1.x + p2.x, y: p1.y + p2.y |}
 let {| x: myX, y: myY, coords: (a, b, c) |} = pointStruct
 var {| x, y |} = pointStruct <| x: 4
@@ -54,8 +54,8 @@ trait StringLike {
 
 type done () // indicate success of operation
 type none () // indicate absence of value
-type T-ok T // indicate success with result
-type T-err T // indicate error
+type <T> ok T // indicate success with result
+type <T> err T // indicate error
 
 // the following function only works on types that are both concatenable and countable
 fun a Concatenable & Countable "*" count int do
@@ -76,22 +76,19 @@ trait Multipliable (*) {
     fun a Self "*" b Self: Self
 }
 
-trait<T (+)> T-Scalable { // may be ambiguous with Multipliable
+trait <T (+)> Scalable { // may be ambiguous with Multipliable
     ...(+),
     fun a Self "*" b T: Self
 }
 
 fun a (+)&(*) "addSquare" b (+)&(*): (+)&(*) => a*a + b*b
 
-fun a @T "addSquare" b @T: @T => a*a + b*b
+fun <T int-Scalable> u T "double": T => u * 2
 
-fun<T int-Scalable> u T "double": T => u * 2
+fun <T> a T "addSquare" b T: T => a*a + b*b
+fun <T (+)&(*)> a T "addSquare" b T: T => a*a + b*b
 
-fun a @T "addSquare" b @T: @T => a*a + b*b
-fun<T> a T "addSquare" b T: T => a*a + b*b
-fun<T (+)&(*)> a T "addSquare" b T: T => a*a + b*b
-
-fun<T (+)> a T-enum "sum": T | err do
+fun <T (+)> a T-enum "sum": T | err do
     var result = #T 0
     a for
     | #ok @x -> result += x
@@ -158,7 +155,7 @@ mut setOfStr del "four"
 
 var dictionary dict{int -> str}-lookup = dict{5 -> "five", 7 -> "seven"}
 let ZERO = 0. let ONE int = 1
-type T-circle T
+type <T> circle T
 let h = f >> g
 let multi = 2 add 3 squared; 4 cubed
 //let piped = 2 add 3 \ squared
@@ -275,7 +272,7 @@ fun n int "factorial"
     | in 0..=1 -> 1
     --> n * ((n - 1) factorial)
 
-fun list [[@T]] "flat": [@T] =>
+fun <T> list [[T]] "flat": [T] =>
     list reduce (++)
 
 1..=3 {*} 1..=3 // all 9 positions in a 3x3 square
@@ -337,8 +334,8 @@ async sub urls "gatherData" =>
 // async implicit await
 let entries = "phonebook.txt" readFile
 
-type T-enum {| state fun () "fetch": T? => ? |}
-type T-asyncEnum {| async state fun () "fetch": T? => ? |}
+type <T> enum {| state fun () "fetch": T? => ? |}
+type <T> asyncEnum {| async state fun () "fetch": T? => ? |}
 
 enum n int "getNumbersSeq": int do
     var i int = 0
@@ -355,7 +352,7 @@ let numbersEnum int-enum = enum: int {
     yield 4
 }
 
-enum<T, U> a T-enum "map" action T->(U-ok | err): U do
+enum <T, U> a T-enum "map" action T->(U-ok | err): U do
     iter () a.fetch
     | #ok @item -> {
         yield #ok item action
@@ -364,7 +361,7 @@ enum<T, U> a T-enum "map" action T->(U-ok | err): U do
     | @e err -> yield e
 end
 
-enum<T> a T-enum "filter" predicate T->(bool-ok | err): T do
+enum <T> a T-enum "filter" predicate T->(bool-ok | err): T do
     iter () a.fetch
     | #ok @item -> (item predicate
         | #ok @keep -> {
@@ -375,7 +372,7 @@ enum<T> a T-enum "filter" predicate T->(bool-ok | err): T do
     | @e err -> yield e
 end
 
-fun<T> a T-enum "toList": [T]-ok | err do
+fun <T> a T-enum "toList": [T]-ok | err do
     var b [T]
     a for
     | #ok @x -> mut b add x
@@ -383,19 +380,19 @@ fun<T> a T-enum "toList": [T]-ok | err do
     b
 end
 
-enum<T> a [T] "toEnum": T do
+enum <T> a [T] "toEnum": T do
     a for @x
         yield x
 end
 
-fun lst @T-enum "tally": dict{@T -> int} do
+fun <T> lst T-enum "tally": dict{T -> int} do
     var counts dict{T -> int} = dict{}
     lst for @x
         counts[x] = (counts[x] ?? 0) + 1 // supposing that ?? can be applied to (#ok T | #none)
     counts
 end
 
-fun lst @T-enum "each" action @T->any: done | any-err do
+fun <T> lst T-enum "each" action T->any: done | any-err do
     iter () lst.fetch // could be implicit await, could be io
     | #done -> break
     | #ok @item -> {
@@ -408,25 +405,25 @@ fun lst @T-enum "each" action @T->any: done | any-err do
     #done
 end
 
-fun keys set{@T} "associate" f @T->@U : dict{@T -> @U} do
+fun <T, U> keys set{T} "associate" f T->U : dict{T -> U} do
     var result dict{T -> U} = dict{}
     keys for @k
         result[k] := k f
     result
 end
 
-fun ab @T-enum^2 "tally": dict{@T -> int*int} do
+fun <T> ab T-enum^2 "tally": dict{T -> int*int} do
     let (aCounts, bCounts) = ab map tally
     let allKeys = aCounts.keys {+} bCounts.keys
     allKeys associate :k => (aCounts[k] ?? 0, bCounts[k] ?? 0)
 end
 
-fun a @T-enum "listUnion" b @T-enum: [@T] do
+fun <T> a T-enum "listUnion" b T-enum: [T] do
     (a, b) tally \ flatMap :k T; v int*int
         => [k] * (v max)
 end
 
-fun a @T-enum "listDiff" b @T-enum: [@T] do
+fun <T> a T-enum "listDiff" b T-enum: [T] do
     let aCounts = a tally
     let bCounts = b tally
 
@@ -434,7 +431,7 @@ fun a @T-enum "listDiff" b @T-enum: [@T] do
         [k] * ((v - (bCounts[k] ?? 0), 0) max)
 end
 
-fun a @T-enum "listInter" b @T-enum: [@T] do
+fun <T> a T-enum "listInter" b T-enum: [T] do
     let aCounts = a tally
     let bCounts = b tally
 
@@ -447,7 +444,7 @@ state fun () "counter": int do
     myCounter += 1
 end
 
-fun n @T "getNumbersEnum" =>
+fun <T> n T "getNumbersEnum" =>
   #T-enum {|
     var _current T: 0
     _last T: n
@@ -467,7 +464,7 @@ iter () myEnum.fetch
 () myEnum.close
 
 // Range from low to high excluded
-fun low @T "..<" high @T; step: @T-enum =>
+fun <T> low T "..<" high T; step: T-enum =>
   {|
     var _current T: low
     _high T: high
@@ -510,10 +507,10 @@ enum filename "getLines": str with io do
     file close
 end
 
-type empty(); value-branch-node value*branch^2
-type T-tree empty | T-(T-tree)-node
+type empty(); <T> node T*(T-tree)^2
+type <T> tree empty | T-node
 
-fun x @T "insert" root @T-tree: @T-tree => root
+fun <T> x T "insert" root T-tree: T-tree => root
 | #empty -> #node (x, #empty, #empty)
 | #node (@y, @left, @right) -> x
   | < y -> #node (y, x insert left, right)

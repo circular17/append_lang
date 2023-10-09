@@ -71,11 +71,10 @@ typeDefs // []
         { return [hd].concat(tl) }
 
 traitDef
-    = traitConstraints:traitConstraints _ genericParams:genericParams _ name:id alias:(_ "(" o:overridableOp ")" { return o })?
+    = genericParams:traitConstraints _ name:id alias:(_ "(" o:overridableOp ")" { return o })?
     __ "{" __ features:features __ "}"
         { return tree.leaf(tree.TRAIT_DEF, {
             name,
-            traitConstraints,
             genericParams,
             alias,
             features
@@ -108,16 +107,12 @@ traitInheritance
     = "..." parent:typeByName { return tree.leaf(tree.INHERITANCE, { parent }, error) }
 
 typeDef
-    = traitConstraints:traitConstraints _ genericParams:genericParams _ name:typeId _ type:type
+    = genericParams:traitConstraints _ name:typeId _ type:type
         { return tree.leaf(tree.TYPE_DEF, {
             name,
-            traitConstraints,
             genericParams,
             type
         }, error) }
-
-genericParams
-    = (i:typeId _ "-" { return i })*
 
 aliasDef
     = genericParams:genericParams _ name:typeId _ "=" _ type:type
@@ -126,6 +121,9 @@ aliasDef
             genericParams,
             type
         }, error) }
+
+genericParams
+    = (i:typeId _ "-" { return i })*
 
 explicitModuleBlock
     = "do" effects:effects? __ s:moduleStatements __ when:when? __ "end"
@@ -145,7 +143,7 @@ fun
 
 funHeader
     = isGlobal:isGlobal isAsync:isAsync purity:purity
-    kind:funKind _ traitConstraints:traitConstraints _ hd:funParam __ "\"" keywordName:$(keyword?) name:(id / overridableOp)? "\""
+    kind:funKind _ genericParams:traitConstraints _ hd:funParam __ "\"" keywordName:$(keyword?) name:(id / overridableOp)? "\""
     tl:(__ p:params { return p })? returnType:(_ colon __ t:type { return t })?
     effects:(__ "with" _ e:identifiers { return e })? {
         if (keywordName)
@@ -158,7 +156,7 @@ funHeader
             purity,
             kind,
             name,
-            traitConstraints,
+            genericParams,
             params: [hd].concat(tl ?? []),
             effects: effects ?? [],
             returnType: returnType ?? (kind === "sub" ? tree.leaf(tree.VOID_TYPE, {}, error): tree.leaf(tree.ANY_TYPE, {}, error))
@@ -506,14 +504,13 @@ traitIntersection
     }
 
 specializeType
-    = hd:(genericParamType / linkedListType) tl:(_ "-" __ t:(genericParamType / linkedListType) { return t })* {
+    = hd:linkedListType tl:(_ "-" __ t:linkedListType { return t })* {
         let types = [hd].concat(tl)
         if (types.length > 1)
             return tree.leaf(tree.SPECIALIZE_TYPE, { base: types.pop(), params: types }, error)
         else
             return hd
     }
-genericParamType = "@" id:id { return tree.leaf(tree.GENERIC_PARAM_TYPE, { name: id }, error) }
 
 linkedListType = elementType:atomicType tail:(_ "<>")? {
         if (tail)
@@ -524,7 +521,6 @@ linkedListType = elementType:atomicType tail:(_ "<>")? {
 
 atomicType
     = anyType
-    / traitAlias
     / listType
     / setType
     / dictType
@@ -610,6 +606,7 @@ lambda
             purity,
             kind: kind ?? "fun",
             name: null,
+            genericParams: [],
             params: tree.getLambdaVariables(value).toSorted().map(name =>
                 tree.leaf(tree.FUN_PARAM_DEF, {
                     names: [tree.leaf(tree.IDENTIFIER, { name }, error)],
@@ -619,14 +616,14 @@ lambda
             body: value,
             returnType: kind === "sub" ? tree.leaf(tree.VOID_TYPE, {}, error) : tree.leaf(tree.ANY_TYPE, {}, error)
         }, error) }
-    / isAsync:isAsync purity:purity kind:("sub" / colon) _ traitConstraints:traitConstraints _
+    / isAsync:isAsync purity:purity kind:("sub" / colon) _ genericParams:traitConstraints _
     params:params __ returnType:(colon _ t:type __ { return t })? body:lambdaBody
         { return tree.leaf(tree.FUN_DEF, {
              isAsync,
              purity,
              kind: kind === ":" ? "fun" : kind,
              name: null,
-             traitConstraints,
+             genericParams,
              params: params,
              body: body,
              returnType: returnType ?? (kind === "sub" ? tree.leaf(tree.VOID_TYPE, {}, error) : tree.leaf(tree.ANY_TYPE, {}, error))
@@ -651,6 +648,7 @@ constructor
             isAsync,
             kind: "fun",
             name: "new",
+            genericParams: [],
             params: [],
             body,
             returnType

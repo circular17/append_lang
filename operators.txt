@@ -91,7 +91,6 @@ Functions
  { }  inline code block
  ;    parameter separator (definition separator)
  :    explicit param lambda, function result type
- @    generic param type (in function definition)
  >>   composition
 
 Pattern matching

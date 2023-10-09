@@ -9,7 +9,7 @@ function transpile(code)
     try
     {
         const parsed = grammar.parse(code)
-        
+
         console.log(toJS(parsed))
         //debug.dump(parsed)
     }
@@ -145,6 +145,50 @@ function endsWithJump(leaf)
         return false
 }
 
+const opToJS = {
+    "=": "eq",
+    "!=": "neq",
+    "<": "lt",
+    "<=": "lte",
+    ">": "gt",
+    ">=": "gte",
+    "%": "mod",
+    "/": "div",
+    "^": "exp",
+    "+": "add",
+    "*": "mul",
+    "-": "neg",
+    "!": "not",
+    "&": "and",
+    "or": "or",
+    "xor": "xor",
+    "++": "concat",
+    "..=" : "rangeIncl",
+    "..>=": "rangeDescIncl",
+    "..": "range",
+    "..>": "rangeDesc",
+    "+..": "rangeCount",
+    "-..": "rangeCountDesc",
+    "{-}": "setDiff",
+    "{+}": "setUnion",
+    "{&}": "setInter",
+    "{*}": "setProd",
+    "{^}": "setExp",
+    "{=}": "setEq",
+    "{!=}": "setNeq",
+    "{<}": "setLt",
+    "{<=}": "setLte",
+    "{>}": "setGt",
+    "{>=}": "setGte"
+}
+
+function idToJS(id) {
+    var op = opToJS[id]
+    if (op) return "$" + op
+    else return id
+}
+
+const startId = /^[A-Za-z_]/
 
 mapJS = {
     MODULE: (leaf) => {
@@ -211,8 +255,10 @@ mapJS = {
         {
             if (!tree.is(leaf.body, tree.CODE_BLOCK))
                 body = "{\n" + indent(body) + "\n}"
-            result = "function" + (leaf.kind === "enum" ? "*" : "") + " " + (leaf.name ?? "")
-                + params + " " + body
+            result = "function" + (leaf.kind === "enum" ? "*" : "") + 
+                (leaf.genericParams.length > 0 ? " /*<" + leaf.genericParams.map(p => toJS(p)) + ">*/" : "") +
+                (leaf.name ? " " + idToJS(leaf.name) : "") +
+                params + " " + body
         }
         else
             result = params + " => " + body
@@ -235,7 +281,9 @@ mapJS = {
             ? "/* effects */ " : "") +
             "{\n" + indent(leaf.statements.map(s => toJS(s)).join("\n")) + "\n}"
     },
-    TYPE_DEF: (leaf) => "/* type " + leaf.genericParams.map(p => p + "-") + leaf.name + " " +
+    TYPE_DEF: (leaf) => "/* type " + 
+        (leaf.genericParams.length > 0 ? "<" + leaf.genericParams.map(p => toJS(p)) + "> " : "") + 
+        leaf.name + " " +
         toJS(leaf.type) + " */",
     ALIAS_DEF: (leaf) => "/* alias " + leaf.genericParams.map(p => p + "-") + leaf.name + " = " +
         toJS(leaf.type) + " */",
@@ -300,10 +348,11 @@ mapJS = {
             "x" + ")".repeat(leaf.functions.length)
     },
     VALUE_BY_NAME: (leaf) => {
-        return leaf.namespace.map(n => n+".").join("") + leaf.name
+        return leaf.namespace.map(n => n+".").join("") + idToJS(leaf.name)
     },
     TYPE_BY_NAME: (leaf) => {
-        return leaf.namespace.map(n => n+".").join("") + leaf.name
+        return leaf.namespace.map(n => n+".").join("") + 
+            (leaf.name.match(startId) ? leaf.name : "(" + leaf.name + ")")
     },
     RESOLVED_VARIABLE: (leaf) => {
         return toJS(leaf.ref)
@@ -465,7 +514,9 @@ mapJS = {
     WITH_EFFECT: (leaf) => "/* effects */ " + toJS(leaf.value),
     TRAIT_INTER: (leaf) => leaf.traits.map(t => toBracketJS(t)).join(" & "),
     TRAIT_DEF: (leaf) =>
-        "/* trait " + leaf.genericParams.map(p => p + "-") + leaf.name +
+        "/* trait " + 
+        (leaf.genericParams.length > 0 ? "<" + leaf.genericParams.map(p => toJS(p)) + "> " : "") + 
+        leaf.name +
         (leaf.alias ? " (" + leaf.alias + ")" : "") + " {\n" +
         indent(leaf.features.map(feature => toJS(feature)).join("\n")) + "\n} */",
     TRAIT_CONSTRAINT: (leaf) => {
