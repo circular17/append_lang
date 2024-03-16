@@ -309,7 +309,9 @@ mapJS = {
     ALIAS_DEF: (leaf) => "/* alias " + leaf.genericParams.map(p => p + "-") + leaf.name + " = " +
         toJS(leaf.type) + " */",
     UNION_TYPE: (leaf) => leaf.types.map(t => toJS(t)).join(" | "),
-    FUN_TYPE: (leaf) => (leaf.isAsync ? "async " : "") + leaf.params.map(t => toJS(t)).join("->"),
+    FUN_TYPE: (leaf) => (leaf.isAsync ? "async " : "") + leaf.kind + "(" + 
+        leaf.params.map(t => toJS(t)).join(" -> ") + 
+        (leaf.kind == "fun" ? " -> " + toJS(leaf.returnType) : "") + ")",
     TUPLE_TYPE: (leaf) => leaf.types.map(t => toBracketJS(t)).join("*"),
     TUPLE_POWER_TYPE: (leaf) => toBracketJS(leaf.base) + "^" + toJS(leaf.power),
     OPTION_TYPE: (leaf) => toBracketJS(leaf.type) + "?",

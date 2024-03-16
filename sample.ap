@@ -54,9 +54,9 @@ trait StringLike {
     fun a Self "substring" from int; to int -> Self
 }
 
-type done () // indicate success of operation
-type none () // indicate absence of value
-type<T> ok T // indicate success with result
+type done ()  // indicate success of operation
+type none ()  // indicate absence of value
+type<T> ok T  // indicate success with result
 type<T> err T // indicate error
 
 // the following function only works on types that are both concatenable and countable
@@ -126,7 +126,7 @@ sub mut x "inc" => x += 1
 mut a inc
 
 let square = :x => x * x
-var subroutine sub(())
+var subroutine sub
 var linkedList int<> = 12::34::67::<>
 linkedList head
 | #none -> "linked list is empty" print
@@ -526,9 +526,11 @@ type empty ()
 type<T> node T*(T-tree)^2
 type<T> tree empty | T-node
 
-fun<T> x T "insert" root T-tree -> T-tree => root
-| #empty -> #node (x, #empty, #empty)
-| #node (@y, @left, @right) -> x
-  | < y -> #node (y, x insert left, right)
-  | > y -> #node (y, left, x insert right)
-  --> #node (x, left, right)
+fun<T> x T "insert" root T-tree -> T-tree => 
+    root
+    | #empty -> #node (x, #empty, #empty)
+    | #node (@y, @left, @right) ->
+        x
+        | < y -> #node (y, x insert left, right)
+        | > y -> #node (y, left, x insert right)
+        --> #node (x, left, right)

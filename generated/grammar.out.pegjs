@@ -179,7 +179,7 @@ funParam
             type: type ?? tree.leaf(tree.ANY_TYPE, {}, error),
             mutable: !!mut
         }, error) }
-    / void
+    / voidType
         { return tree.leaf(tree.FUN_PARAM_DEF, {
             names:[tree.leaf(tree.VOID_VALUE, {}, error)],
             type: tree.leaf(tree.VOID_TYPE, {}, error),
@@ -460,21 +460,27 @@ unionType
     }
 
 functionType
-    = isAsync:isAsync purity:purity kind:funKind _ "(" __ hd:unionType 
-    tl:(__ "->" __ t:unionType { return t })* __ ")" {
+    = isAsync:isAsync purity:purity kind:funKind params:functionTypeParams? {
         if (kind == "enum")
-            error("Function kind cannot be enum");
-        const params = [hd].concat(tl);
-        if (kind == "fun" && params.length == 1)
-            error("Function need a return type");
+            error("Function kind cannot be enum")
+        var fixedParams = params ?? [tree.leaf(tree.VOID_TYPE, {}, error)]
+        if (kind == "fun" && (fixedParams.length <= 1))
+            error("Function need an input and a return type")
+        if (kind == "sub")
+            fixedParams.push(tree.leaf(tree.VOID_TYPE, {}, error))
         return tree.leaf(tree.FUN_TYPE, {
                 isAsync,
                 purity,
                 kind,
-                params
+                params: fixedParams.slice(0, fixedParams.length - 1),
+                returnType: fixedParams[fixedParams.length - 1]
         }, error)
     }
     / voidTypeOrNot
+
+functionTypeParams
+    = _ "(" __ hd:unionType tl:(__ "->" __ t:unionType { return t })* __ ")"
+        { return [hd].concat(tl) }
 
 voidTypeOrNot
     = voidType

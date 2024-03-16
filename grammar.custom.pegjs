@@ -179,7 +179,7 @@ funParam
             type: type ?? #ANY_TYPE {},
             mutable: !!mut
         }
-    / void
+    / voidType
         => #FUN_PARAM_DEF {
             names:[#VOID_VALUE {}],
             type: #VOID_TYPE {},
@@ -460,21 +460,27 @@ unionType
     }
 
 functionType
-    = isAsync:isAsync purity:purity kind:funKind _ "(" __ hd:unionType 
-    tl:(__ "->" __ t:unionType => t)* __ ")" {
+    = isAsync:isAsync purity:purity kind:funKind params:functionTypeParams? {
         if (kind == "enum")
-            error("Function kind cannot be enum");
-        const params = hd::tl;
-        if (kind == "fun" && params.length == 1)
-            error("Function need a return type");
+            error("Function kind cannot be enum")
+        var fixedParams = params ?? [#VOID_TYPE {}]
+        if (kind == "fun" && (fixedParams.length <= 1))
+            error("Function need an input and a return type")
+        if (kind == "sub")
+            fixedParams.push(#VOID_TYPE {})
         return #FUN_TYPE {
                 isAsync,
                 purity,
                 kind,
-                params
+                params: fixedParams.slice(0, fixedParams.length - 1),
+                returnType: fixedParams[fixedParams.length - 1]
         }
     }
     / voidTypeOrNot
+
+functionTypeParams
+    = _ "(" __ hd:unionType tl:(__ "->" __ t:unionType => t)* __ ")"
+        => hd::tl
 
 voidTypeOrNot
     = voidType
