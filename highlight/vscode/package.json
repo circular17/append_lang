@@ -1,0 +1,25 @@
+{
+  "name": "append-lang",
+  "displayName": "Append Lang",
+  "description": "Syntax highlight for Append language",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.87.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "append",
+      "aliases": ["Append", "append"],
+      "extensions": [".ap"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "append",
+      "scopeName": "source.ap",
+      "path": "./syntaxes/append.tmLanguage.json"
+    }]
+  }
+}

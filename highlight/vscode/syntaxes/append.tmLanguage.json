@@ -1,0 +1,68 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "Append",
+	"patterns": [
+		{
+			"name": "comment.line.double-dash",
+			"match": "//[^\n]*."
+		},
+		{
+			"name": "comment.block",
+			"match": "/\\*.*\\*/"
+		},
+		{
+			"include": "#keywords"
+		},
+		{
+			"include": "#strings"
+		},
+		{
+			"include": "#implicitParameters"
+		},
+		{
+			"include": "#captures"
+		},
+		{
+			"include": "#operatorNames"
+		},
+		{
+			"include": "#operators"
+		}
+	],
+	"repository": {
+		"keywords": {
+			"patterns": [{
+				"name": "keyword.control.append",
+				"match": "\\b(let|var|fun|sub|mut|do|end|return|yield|state|new|const|init|base|prop|me|with|type|any|enum|set|dict|yes|no|trait|alias|wise|else|while|repeat|each|next|break|when|resume|in|by|or|xor|global|async|defer)\\b"
+			}]
+		},
+		"strings": {
+			"name": "string.quoted.double.append",
+			"begin": "\"",
+			"end": "\"",
+			"patterns": [
+				{
+					"name": "constant.character.escape.append",
+					"match": "{{|}}|\"\""
+				}
+			]
+		},
+		"captures": {
+			"name": "variable.parameter",
+			"match": "@_?[A-Za-z][A-Za-z0-9_]*"
+		},
+		"implicitParameters": {
+			"name": "variable.parameter",
+			"match": "\\$[a-z]"
+		},
+		"operatorNames": {
+			"name": "entity.name.function",
+			"match": "\\([-+*/\\\\!$%&=?^:;,.<>|@#]\\)"
+		},
+		"operators": {
+			"name": "keyword.operator",
+			"match": "[-+*/\\\\!$%&=?^:;,.<>|@#]"
+		}
+	},
+	"scopeName": "source.ap"
+}
