@@ -10,7 +10,12 @@ function transpile(code)
     {
         const parsed = grammar.parse(code)
 
-        console.log(toJS(parsed))
+        if (tree.is(parsed, tree.MODULE)) {
+            for (const statement of parsed.statements)
+                console.log(toJS(statement));
+        }
+        else
+            console.log(toJS(parsed))
         //debug.dump(parsed)
     }
     catch (e) {
@@ -269,6 +274,22 @@ mapJS = {
     FUN_PARAM_DEF: (leaf) => {
         return "/* " + toJS(leaf.type) + " */ " + leaf.names.map(n => toJS(n)).join(", ")
     },
+    CURRIED_FUN: (leaf) => {
+        let curryParams = [];
+        let callParams = [];
+        for (const param of leaf.params) {
+            if (tree.is(param, tree.CURRY_PARAM)) {
+                const curryParam = "$" + String.fromCharCode(97 + curryParams.length);
+                curryParams.push(curryParam);
+                callParams.push(curryParam);
+            }
+            else
+                callParams.push(toJS(param));
+        }
+        //const effectStr = leaf.effects.length == 0 ? "" : ", /* effects */ " + leaf.effects.map(p => toJS(p)).join(", ");
+        return "function (" + curryParams.join(", ") + ") { return " +
+            toJS(leaf.fun) + "(" + callParams.join(", ") + "); }";
+    },
     INLINE_ENUM: (leaf) => {
         let body = toJS(leaf.body)
         if (!tree.is(leaf.body, tree.CODE_BLOCK))
@@ -423,6 +444,7 @@ mapJS = {
         return "yield* " + toJS(leaf.enumerator)
     },
     CALL: (leaf) => {
+        const effectStr = leaf.effects.length == 0 ? "" : ", /* effects */ " + leaf.effects.map(p => toJS(p)).join(", ");
         if (leaf.params.length === 1 && tree.is(leaf.params[0], tree.VOID_VALUE))
             return toJS(leaf.fun) + "()"
         else
@@ -431,7 +453,7 @@ mapJS = {
 
         }
         else*/
-            return toJS(leaf.fun) + "(" + leaf.params.map(p => toJS(p)).join(", ") + ")"
+            return toJS(leaf.fun) + "(" + leaf.params.map(p => toJS(p)).join(", ") + effectStr + ")"
     },
     INTEGER: (leaf) => {
         return leaf.value + "n"
@@ -465,7 +487,7 @@ mapJS = {
         return (leaf.label ? leaf.label + ": " : "") +
             "while (" + toJS(leaf.condition) + ") " + toJS(leaf.body)
     },
-    ITER: (leaf) => {
+    REPEAT: (leaf) => {
         addLabelToLoopIfNeeded(leaf)
         return (leaf.label ? leaf.label + ": " : "") +
             "while (true) {\n" + 
@@ -511,7 +533,6 @@ mapJS = {
     SPECIALIZE_TYPE: (leaf) => {
         return leaf.params.map(p => toJS(p) + "-") + toJS(leaf.base)
     },
-    WITH_EFFECT: (leaf) => "/* effects */ " + toJS(leaf.value),
     TRAIT_INTER: (leaf) => leaf.traits.map(t => toBracketJS(t)).join(" & "),
     TRAIT_DEF: (leaf) =>
         "/* trait " + 

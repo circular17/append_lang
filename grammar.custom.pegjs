@@ -62,8 +62,9 @@ deconstructElement
     / deconstruct
 
 typeDefs // []
-    = "type" _ hd:typeDef tl:(_ ";" __ t:typeDef => t)*
-        => hd::tl
+    = "type" _ t:typeDef {
+        return [t]
+    }
     / "trait" _ t:traitDef {
         return [t]
     }
@@ -144,7 +145,7 @@ fun
 funHeader
     = isGlobal:isGlobal isAsync:isAsync purity:purity
     kind:funKind _ genericParams:traitConstraints _ hd:funParam __ "\"" keywordName:$(keyword?) name:(id / overridableOp)? "\""
-    tl:(__ p:params => p)? returnType:(_ colon __ t:type => t)?
+    tl:(__ p:params => p)? returnType:(__ "->" __ t:type => t)?
     effects:(__ "with" _ e:identifiers => e)? {
         if (keywordName)
             error(`The keyword '${keywordName}' cannot be used as an identifier`)
@@ -236,8 +237,8 @@ branch
 loop
     = "while" _ condition:valueExpr __ body:loopBody
         => #WHILE { condition, body }
-    / "iter" body:loopBody
-        => #ITER { body }
+    / "repeat" body:loopBody
+        => #REPEAT { body }
 
 loopBody
     = branch
@@ -255,12 +256,12 @@ optionWithPipe
     }
 
 for
-    = _ "for" _ "@" _ variable:id __ body:loopBody
+    = _ "each" _ "@" _ variable:id __ body:loopBody
         => #FOR_EACH { 
             variable: #VALUE_BY_NAME { name: variable, namespace: [] }, 
             body
         }
-    / _ "for" body:case {
+    / _ "each" body:case {
         const variableId = #IDENTIFIER { name: null }
         const variableName = #NAMES { identifiers: [variableId] }
         const variableDef = #CONST_DEF { names: variableName, type: null, value: null }
@@ -459,14 +460,21 @@ unionType
     }
 
 functionType
-    = isAsync:isAsync purity:purity hd:voidTypeOrNot tl:(_ "->" __ t:voidTypeOrNot => t)* {
-        return tl.length > 0
-            ? #FUN_TYPE {
+    = isAsync:isAsync purity:purity kind:funKind _ "(" __ hd:unionType 
+    tl:(__ "->" __ t:unionType => t)* __ ")" {
+        if (kind == "enum")
+            error("Function kind cannot be enum");
+        const params = hd::tl;
+        if (kind == "fun" && params.length == 1)
+            error("Function need a return type");
+        return #FUN_TYPE {
                 isAsync,
                 purity,
-                params: hd::tl
-            }
-            : hd }
+                kind,
+                params
+        }
+    }
+    / voidTypeOrNot
 
 voidTypeOrNot
     = voidType
@@ -685,7 +693,7 @@ pipedExpr
 valueExpr = assignment
 
 assignment
-    = variable:withEffect assign:assignValue? {
+    = variable:default assign:assignValue? {
         if (assign)
         {
             assign.variable = variable
@@ -698,18 +706,6 @@ assignment
 assignValue
     = _ op:assignmentOp __ value:optionalTernary
         => #ASSIGN { operator: op, value }
-
-withEffect
-    = value:default effects:effects? {
-        if (effects)
-            return #WITH_EFFECT { value, effects }
-        else
-            return value
-    }
-
-effects // []
-    = _ "with" _ hd:default tl:(_ "," __ d:default => d)*
-        => hd::tl
 
 default = hd:disjunction tl:(__ "??" __ d:disjunction => d)* {
         return tl.length > 0
@@ -813,27 +809,39 @@ call
     = c:nestedCall {
         if (tree.is(c, tree.MUTABLE_PARAM))
             error("Mutable keyword can only used to pass parameters")
+        if (tree.is(c, tree.CURRY_PARAM))
+            error("Curry parameter cannot be used without call")
         return c
     }
 
 nestedCall
-    = left:callParam appendCall:appendCall? {
+    = left:(callParam / curryParam) appendCall:appendCall? {
         if (appendCall)
         {
             appendCall.params.unshift(left)
+            if (appendCall.params.some(p => tree.is(p, tree.CURRY_PARAM)))
+                appendCall._ = tree.CURRIED_FUN
             return appendCall
         }
         else
             return left
     }
 
+effects // []
+    = _ "with" _ hd:default tl:(_ "," __ d:default => d)*
+        => hd::tl
+
 appendCall
-    = _ fun:multiplication defer:(_ "defer")? params:rightParams?
-        => #CALL { fun, defer: !!defer, params: params ?? [] }
+    = _ fun:multiplication defer:(_ "defer")? 
+    effects:(_ e:effects => e)? params:rightParams?
+        => #CALL { fun, defer: !!defer, params: params ?? [], effects: effects ?? [] }
 
 rightParams
-    = _ hd:call tl:(_ ";" __ c:nestedCall => c)*
+    = _ hd:nestedCall tl:(_ ";" __ c:nestedCall => c)*
         => hd::tl
+
+curryParam
+    = "_" ![_A-Za-z0-9] => #CURRY_PARAM { }
 
 callParam
     = mut:"mut"? _ value:setDiff {
@@ -1116,7 +1124,7 @@ eol = ([ \t] / comment)* "\r"? "\n" __
 keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return" / "yield" / "state"
     / "new" / "const" / "init" / "base" / "prop" / "me" / "with"
     / "type" / "any" / "enum" / "set" / "dict" / "yes" / "no" / "trait" / "alias"
-    / "wise" / "else" / "while" / "iter" / "for" / "next" / "break" / "when" / "resume"
+    / "wise" / "else" / "while" / "repeat" / "each" / "next" / "break" / "when" / "resume"
     / "in" / "by" / "or" / "xor" / "global" / "async" / "defer") ![A-Za-z0-9_]
 
 assignmentOp = ":=" / "*=" / "/=" / "%=" / "+=" / "-=" / "++="

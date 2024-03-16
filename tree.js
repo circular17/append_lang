@@ -36,7 +36,7 @@ function check(tree, error)
             break
 
         case FOR_EACH:
-        case ITER:
+        case REPEAT:
         case WHILE:
             findContinueBreak(tree.body, (node) => node.loop = tree)
     }
@@ -58,7 +58,7 @@ function findContinueBreak(tree, callback) {
     switch (tree._)
     {
         case FOR_EACH:
-        case ITER:
+        case REPEAT:
         case WHILE:
             return
 
@@ -266,6 +266,8 @@ const YIELD = "YIELD"
 const YIELD_IN = "YIELD_IN"
 const COMPOSE = "COMPOSE"
 const CALL = "CALL"
+const CURRY_PARAM = "CURRY_PARAM"
+const CURRIED_FUN = "CURRIED_FUN"
 const INTEGER = "INTEGER"
 const FLOAT = "FLOAT"
 const DICT_VALUE = "DICT_VALUE"
@@ -274,7 +276,7 @@ const BOOLEAN = "BOOLEAN"
 const ASSIGN = "ASSIGN"
 const MUTABLE_PARAM = "MUTABLE_PARAM"
 const WHILE = "WHILE"
-const ITER = "ITER"
+const REPEAT = "REPEAT"
 const NEXT = "NEXT"
 const BREAK = "BREAK"
 const RANGE = "RANGE"
@@ -298,7 +300,6 @@ const SET_INTER = "SET_INTER"
 const SET_COMPARISON = "SET_COMPARISON"
 const SET_COMPARISON_OPERAND = "SET_COMPARISON_OPERAND"
 const SPECIALIZE_TYPE = "SPECIALIZE_TYPE"
-const WITH_EFFECT = "WITH_EFFECT"
 const TRAIT_INTER = "TRAIT_INTER"
 const TRAIT_DEF = "TRAIT_DEF"
 const TRAIT_CONSTRAINT = "TRAIT_CONSTRAINT"
@@ -373,6 +374,8 @@ leafName = {
     YIELD: "yield statement",
     YIELD_IN: "recursive yield statement",
     CALL: "function call",
+    CURRY_PARAM: "curry parameter",
+    CURRIED_FUN: "curried function",
     INTEGER: "integer",
     FLOAT: "floating point value",
     DICT_VALUE: "dictionary value",
@@ -381,7 +384,7 @@ leafName = {
     ASSIGN: "assignment",
     MUTABLE_PARAM: "mutable parameter",
     WHILE: "while loop",
-    ITER: "iteration loop",
+    REPEAT: "repeat loop",
     NEXT: "next loop instruction",
     BREAK: "break loop instruction",
     RANGE: "range",
@@ -405,7 +408,6 @@ leafName = {
     SET_COMPARISON: "set comparison",
     SET_COMPARISON_OPERAND: "set comparison operand",
     SPECIALIZE_TYPE: "type specialization",
-    WITH_EFFECT: "expression with effect",
     TRAIT_INTER: "trait intersection",
     TRAIT_DEF: "trait definition",
     TRAIT_CONSTRAINT: "trait constraint",
@@ -487,6 +489,8 @@ module.exports = {
     YIELD,
     YIELD_IN,
     CALL,
+    CURRY_PARAM,
+    CURRIED_FUN,
     INTEGER,
     FLOAT,
     DICT_VALUE,
@@ -495,7 +499,7 @@ module.exports = {
     ASSIGN,
     MUTABLE_PARAM,
     WHILE,
-    ITER,
+    REPEAT,
     NEXT,
     BREAK,
     RANGE,
@@ -519,7 +523,6 @@ module.exports = {
     SET_COMPARISON,
     SET_COMPARISON_OPERAND,
     SPECIALIZE_TYPE,
-    WITH_EFFECT,
     TRAIT_INTER,
     TRAIT_DEF,
     TRAIT_CONSTRAINT,
