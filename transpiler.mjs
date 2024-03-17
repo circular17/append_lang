@@ -106,7 +106,7 @@ function endsWithJump(leaf)
         return false
 }
 
-const opToJS = {
+const opToJSName = {
     "=": "eq",
     "!=": "neq",
     "<": "lt",
@@ -144,7 +144,7 @@ const opToJS = {
 }
 
 function idToJS(id) {
-    var op = opToJS[id]
+    var op = opToJSName[id]
     if (op) return "$" + op
     else return id
 }
@@ -303,7 +303,8 @@ const mapJS = {
         return comparisons.join(" && ")
     },
     COMPARISON_OPERAND: (leaf) => {
-      return leaf.operator + " " + toBracketJS(leaf.value)
+      const jsOp = leaf.operator == "=" ? "==" : leaf.operator
+      return jsOp + " " + toBracketJS(leaf.value)
     },
     CONCAT: (leaf) =>
         toBracketJS(leaf.operands[0]) + ".concat(" + leaf.operands.slice(1).map(o => toJS(o)).join(", ") + ")",
@@ -431,17 +432,6 @@ const mapJS = {
     },
     BOOLEAN: (leaf) => {
         return leaf.value ? "true" : "false"
-    },
-    ASSIGN: (leaf) => {
-        if (leaf.operator !== "++=") {
-            return toJS(leaf.variable) + " " +
-                (leaf.operator === ":=" ? "=" : leaf.operator) +
-                " " + toJS(leaf.value)
-        } else
-        {
-            return toBracketJS(leaf.variable) + ".push(..." +
-                toBracketJS(leaf.value) + ")"
-        }
     },
     MUTABLE_PARAM: (leaf) => "{ ref: " + toJS(leaf.value) + " }",
     WHILE: (leaf) => {

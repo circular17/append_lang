@@ -704,22 +704,7 @@ pipedExpr
             return option
     }
 
-valueExpr = assignment
-
-assignment
-    = variable:default assign:assignValue? {
-        if (assign)
-        {
-            assign.variable = variable
-            return assign
-        }
-        else
-            return variable
-    }
-
-assignValue
-    = _ op:assignmentOp __ value:optionalTernary
-        { return tree.leaf(tree.ASSIGN, { operator: op, value }, error) }
+valueExpr = default
 
 default = hd:disjunction tl:(__ "??" __ d:disjunction { return d })* {
         return tl.length > 0
@@ -821,8 +806,6 @@ term = call
 
 call
     = c:nestedCall {
-        if (tree.is(c, tree.MUTABLE_PARAM))
-            error("Mutable keyword can only used to pass parameters")
         if (tree.is(c, tree.CURRY_PARAM))
             error("Curry parameter cannot be used without call")
         return c
@@ -857,13 +840,7 @@ rightParams
 curryParam
     = "_" ![_A-Za-z0-9] { return tree.leaf(tree.CURRY_PARAM, { }, error) }
 
-callParam
-    = mut:"mut"? _ value:setDiff {
-        if (mut)
-            return tree.leaf(tree.MUTABLE_PARAM, { value }, error)
-        else
-            return value
-    }
+callParam = setDiff
 
 setDiff
     = hd:setUnion tl:(__ "{-}" __ t:setUnion { return t })* {
@@ -932,32 +909,37 @@ otherFactor
         { return tree.leaf(tree.FACTOR, { operator, value:factor }, error) }
 factor
     = not
-    / exponentiation;
+    / compose;
 
 not = notOp f:factor
     { return tree.leaf(tree.NOT, { value:f }, error) }
 
-exponentiation
-    = base:indexing power:(_ powerOp __ p:indexing { return p })? {
-        return power
-            ? tree.leaf(tree.EXPONENTIATION, { base, power }, error)
-            : base
-        }
-
-indexing
-    = list:compose index:(_ "[" __ i:branch __ "]" { return i })? {
-        return index
-            ? tree.leaf(tree.INDEXING, { list, index }, error)
-            : list
-        }
-
 compose
-    = hd:taggedAtom tl:(_ composeOp __ a:taggedAtom { return a })* {
+    = hd:exponentiation tl:(_ composeOp __ a:exponentiation { return a })* {
         if (tl.length > 0)
             return tree.leaf(tree.COMPOSE, { functions: [hd].concat(tl) }, error)
         else
             return hd
     }
+
+exponentiation
+    = base:mutValue power:(_ powerOp __ p:mutValue { return p })? {
+        return power
+            ? tree.leaf(tree.EXPONENTIATION, { base, power }, error)
+            : base
+        }
+
+mutValue
+    = "mut" _ value:indexing
+        { return tree.leaf(tree.MUTABLE_PARAM, { value }, error) }
+    / indexing
+
+indexing
+    = list:taggedAtom index:(_ "[" __ i:branch __ "]" { return i })? {
+        return index
+            ? tree.leaf(tree.INDEXING, { list, index }, error)
+            : list
+        }
 
 /************* ATOMS *************/
 
@@ -1141,7 +1123,6 @@ keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return" / "yi
     / "wise" / "else" / "while" / "repeat" / "each" / "next" / "break" / "when" / "resume"
     / "in" / "by" / "or" / "xor" / "global" / "async" / "defer" / "use") ![A-Za-z0-9_]
 
-assignmentOp = ":=" / "*=" / "/=" / "%=" / "+=" / "-=" / "++="
 colon = $(":" ![=:])
 
 pipe = $("|" !"}")

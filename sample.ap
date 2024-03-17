@@ -34,7 +34,7 @@ global fun<T> p1 T-point "+" p2 T-point
 let {| x: myX, y: myY, coords: (a, b, c) |} = pointStruct
 var {| x, y |} = pointStruct <| x: 4
 let xOnly = pointStruct <| !y
-pointStruct.y := 6
+mut pointStruct.y = 6
 let problematic str = "this {a}"
 var anything any = "hello"   // this will be inferred
 var functionVar fun(int -> int -> int) = => $x + $y
@@ -93,7 +93,7 @@ fun<T (+)&(*)> a T "addSquare" b T -> T => a*a + b*b
 fun<T (+)> a T-enum "sum" -> T | err do
     var result = #T 0
     a each
-    | #ok @x -> result += x
+    | #ok @x -> mut result + x
     | #err @e -> return e
     result
 end
@@ -104,7 +104,7 @@ sub toDiscard "drop" => ()
 fun () "someStuff" -> done | any-err do
     () someOperation
     mut a add "world"
-    a[5] := "hello"
+    mut a[5] = "hello"
     mut a del "goodbye"
     () optionalStuff \ drop   // ignore the errors
     "Processing successful" print
@@ -122,7 +122,7 @@ when // handle implicit return values different from #done
     }
 end
 
-sub mut x "inc" => x += 1
+sub mut x "inc" => mut x + 1
 mut a inc
 
 let square = :x => x * x
@@ -140,7 +140,7 @@ var optionalList [int]? = #none
 optionalList = #ok [1, 2, 3]
 optionalList
 | #ok @a -> {
-    optionalList := a ins (-12); 0 // insert at index 0
+    mut optionalList = a ins (-12); 0 // insert at index 0
                     \ del 1+..2    // range from 1, 2 elements long
 }
 
@@ -228,7 +228,7 @@ x + y
 var i = 0
 while i < 10 {
     "hello" print
-    i += 1
+    mut i + 1
 }
 
 // function "has"
@@ -244,7 +244,7 @@ state fun identifier "locale" do
     else
     {
         let instance JSObject = new JS--Intl--Locale (identifier)
-        _locales[identifier] := instance
+        mut _locales[identifier] = instance
         instance
     }
 end
@@ -303,12 +303,12 @@ type Locale {|
     var _positive int: 0 // private read/write, with default value
     state prop positive int // public read/write via accessor
         => _positive
-        set => $v >= 0 ? _positive := $v
+        set => $v >= 0 ? mut _positive = $v
 
     new | err str
         // identifier will need to be set in initialization record expression
-        _instance := new JS--Intl--Locale (identifier ?? "")
-        _localeCount += 1
+        mut _instance = new JS--Intl--Locale (identifier ?? "")
+        mut _localeCount + 1
     end
 |}
 
@@ -324,7 +324,7 @@ type frenchLocale {|
     base identifier = "fr-FR"
     var croissants int
     new
-        croissants := 3 + 5 random
+        mut croissants = 3 + 5 random
     end
 |}
 
@@ -336,7 +336,7 @@ fun locale frenchLocale "showInfo" do
     }
 end
 
-fun mut locale "buyCroissant" => locale.croissants += 1 // works with any locale with croissants
+fun mut locale "buyCroissant" => mut locale.croissants + 1 // works with any locale with croissants
 
 async sub urls "gatherData" =>
   urls map => $u fetch defer \ wantAll defer // defer to not wait for result
@@ -353,7 +353,7 @@ enum n int "getNumbersSeq" -> int do
     var i int = 0
     while i < n {
         yield i
-        i += 1
+        mut i + 1
     }
 end
 
@@ -423,7 +423,7 @@ end
 fun<T, U> keys set{T} "associate" f fun(T -> U) -> dict{T -> U} do
     var result dict{T -> U} = dict{}
     keys each @k
-        result[k] := k f
+        mut result[k] = k f
     result
 end
 
@@ -456,7 +456,7 @@ end
 
 var myCounter = 0 // would be outside
 state fun () "counter" -> int do
-    myCounter += 1
+    mut myCounter + 1
 end
 
 fun<T> n T "getNumbersEnum" =>
@@ -466,7 +466,7 @@ fun<T> n T "getNumbersEnum" =>
     state fun () "fetch" =>
       me._current < me._last ? {
         let result = _current
-        _current += 1
+        mut _current + 1
         #ok result
       } else #done
     state fun () "close" => ()
@@ -486,7 +486,7 @@ fun<T> low T "..<" high T; step -> T-enum =>
     state fun () "fetch" =>
       me._current < me._high ? {
         let result = _current
-        _current += step // type T only need to handle "+ step" and "<"
+        mut _current + step // type T only need to handle "+ step" and "<"
         #ok result
       } else #done
     state fun value "has" =>

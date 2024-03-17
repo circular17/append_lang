@@ -1,6 +1,16 @@
 use runtime1
 
+var n = 5
+
 var list [int]
+mut list = list ++ [2]
+mut list = [5] ++ list
+mut list = [5, ...list]
+
+mut list ++ [2]
+[5] ++ mut list
+
 mut list push 2
-mut list push 5
+mut list unshift 5
+
 list sum \ print

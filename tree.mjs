@@ -273,7 +273,6 @@ export const FLOAT = "FLOAT"
 export const DICT_VALUE = "DICT_VALUE"
 export const DICT_KEY_VALUE = "DICT_KEY_VALUE"
 export const BOOLEAN = "BOOLEAN"
-export const ASSIGN = "ASSIGN"
 export const MUTABLE_PARAM = "MUTABLE_PARAM"
 export const WHILE = "WHILE"
 export const REPEAT = "REPEAT"
@@ -383,7 +382,6 @@ const leafName = {
     DICT_VALUE: "dictionary value",
     DICT_KEY_VALUE: "dictionary entry value",
     BOOLEAN: "boolean value",
-    ASSIGN: "assignment",
     MUTABLE_PARAM: "mutable parameter",
     WHILE: "while loop",
     REPEAT: "repeat loop",

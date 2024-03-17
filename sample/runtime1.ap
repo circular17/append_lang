@@ -4,12 +4,29 @@ fun left int "*" right int -> int do `left * right` end
 fun left int "/" right int -> int do `left / right` end
 fun left int "%" right int -> int do `left % right` end
 
-sub<T> mut list [T] "push" element T do
-    `list.ref.push(element)`
+sub<T> mut list1 [T] "++" list2 T do
+    `list1.ref.push(...list2)`
 end
 
-fun<T> mut list [T] "pop" element T do
-    `list.ref.pop(element)`
+sub<T> list1 [T] "++" mut list2 T do
+    `list2.ref.unshift(...list1)`
+end
+
+
+sub<T> mut list [T] "push" element T do
+    `list1.ref.push(element)`
+end
+
+sub<T> mut list [T] "unshift" element T do
+    `list1.ref.unshift(element)`
+end
+
+fun<T> mut list [T] "pop" -> T do
+    `list.ref.pop()`
+end
+
+fun<T> mut list [T] "shift" -> T do
+    `list.ref.shift()`
 end
 
 fun<T> list [T] "sum" -> T do

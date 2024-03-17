@@ -704,22 +704,7 @@ pipedExpr
             return option
     }
 
-valueExpr = assignment
-
-assignment
-    = variable:default assign:assignValue? {
-        if (assign)
-        {
-            assign.variable = variable
-            return assign
-        }
-        else
-            return variable
-    }
-
-assignValue
-    = _ op:assignmentOp __ value:optionalTernary
-        => #ASSIGN { operator: op, value }
+valueExpr = default
 
 default = hd:disjunction tl:(__ "??" __ d:disjunction => d)* {
         return tl.length > 0
@@ -821,8 +806,6 @@ term = call
 
 call
     = c:nestedCall {
-        if (tree.is(c, tree.MUTABLE_PARAM))
-            error("Mutable keyword can only used to pass parameters")
         if (tree.is(c, tree.CURRY_PARAM))
             error("Curry parameter cannot be used without call")
         return c
@@ -857,13 +840,7 @@ rightParams
 curryParam
     = "_" ![_A-Za-z0-9] => #CURRY_PARAM { }
 
-callParam
-    = mut:"mut"? _ value:setDiff {
-        if (mut)
-            return #MUTABLE_PARAM { value }
-        else
-            return value
-    }
+callParam = setDiff
 
 setDiff
     = hd:setUnion tl:(__ "{-}" __ t:setUnion => t)* {
@@ -932,32 +909,37 @@ otherFactor
         => #FACTOR { operator, value:factor }
 factor
     = not
-    / exponentiation;
+    / compose;
 
 not = notOp f:factor
     => #NOT { value:f }
 
-exponentiation
-    = base:indexing power:(_ powerOp __ p:indexing => p)? {
-        return power
-            ? #EXPONENTIATION { base, power }
-            : base
-        }
-
-indexing
-    = list:compose index:(_ "[" __ i:branch __ "]" => i)? {
-        return index
-            ? #INDEXING { list, index }
-            : list
-        }
-
 compose
-    = hd:taggedAtom tl:(_ composeOp __ a:taggedAtom => a)* {
+    = hd:exponentiation tl:(_ composeOp __ a:exponentiation => a)* {
         if (tl.length > 0)
             return #COMPOSE { functions: hd::tl }
         else
             return hd
     }
+
+exponentiation
+    = base:mutValue power:(_ powerOp __ p:mutValue => p)? {
+        return power
+            ? #EXPONENTIATION { base, power }
+            : base
+        }
+
+mutValue
+    = "mut" _ value:indexing
+        => #MUTABLE_PARAM { value }
+    / indexing
+
+indexing
+    = list:taggedAtom index:(_ "[" __ i:branch __ "]" => i)? {
+        return index
+            ? #INDEXING { list, index }
+            : list
+        }
 
 /************* ATOMS *************/
 
@@ -1141,7 +1123,6 @@ keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return" / "yi
     / "wise" / "else" / "while" / "repeat" / "each" / "next" / "break" / "when" / "resume"
     / "in" / "by" / "or" / "xor" / "global" / "async" / "defer" / "use") ![A-Za-z0-9_]
 
-assignmentOp = ":=" / "*=" / "/=" / "%=" / "+=" / "-=" / "++="
 colon = $(":" ![=:])
 
 pipe = $("|" !"}")
