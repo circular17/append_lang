@@ -1,18 +1,13 @@
 // Utility functions for debugging
 
-const util = require("util");
+import util from "util"
 
-function pretty(obj)
+export function pretty(obj)
 {
     return util.inspect(obj, {showHidden: false, depth: null, colors: true})
 }
 
-function dump(obj)
+export function dump(obj)
 {
     console.log(pretty(obj))
 }
-
-module.exports = {
-    dump,
-    pretty
-};

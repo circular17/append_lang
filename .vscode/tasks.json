@@ -4,28 +4,43 @@
         {
             "label": "build custom peg grammar",
             "type": "shell",
-            "command": "pegjs",
-            "args": ["-o", "generated/custom-peg.js", "custom-peg.pegjs"]
+            "command": "peggy",
+            "args": ["-o", "generated/custom-peg.mjs", 
+                "--format", "es", 
+                "custom-peg.pegjs"]
         },
         {
             "label": "convert custom peg to pegjs",
             "dependsOn": ["build custom peg grammar"],
             "type": "shell",
             "command": "node",
-            "args": ["grammar-preprocessor.js", "grammar.custom.pegjs", "generated/grammar.out.pegjs"]
+            "args": ["grammar-preprocessor.mjs", "grammar.custom.pegjs", "generated/grammar.out.pegjs"]
         },
         {
             "label": "build append grammar",
             "dependsOn": ["convert custom peg to pegjs"],
             "type": "shell",
-            "command": "pegjs",
-            "args": ["-o", "generated/grammar.out.js", "-d", "tree:../tree", "generated/grammar.out.pegjs"]
+            "command": "peggy",
+            "args": ["-o", "generated/grammar.out.mjs", 
+                "-d", "tree:../tree.mjs", 
+                "--format", "es", 
+                "generated/grammar.out.pegjs"]
+        },
+        {  
+            "label": "import all tree",
+            "dependsOn": "build append grammar",
+            "type": "shell",
+            "command": "perl",
+            "args": ["-i", "-pe", 
+                "'s|import tree from|import \\* as tree from|'", 
+                "generated/grammar.out.mjs"]
         },
         {
             "label": "build",
             "dependsOn": ["build custom peg grammar", 
                 "convert custom peg to pegjs",
-                "build append grammar"
+                "build append grammar",
+                "import all tree"
             ]
         }
     ]

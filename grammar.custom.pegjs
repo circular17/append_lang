@@ -14,18 +14,26 @@ moduleStatements // []
 
 statement
     = defs
+    / js
     / vars
     / typeDefs
     / fun
     / branch
 
 moduleStatement // [] or leaf
-    = statement
+    = use
+    / statement
     / explicitModuleBlock
 
 statementSeparator
     = _ d:"." " " _ => d
     / eol
+
+use = "use" _ hd:id tl:(_ "," __ id:id => id)*
+        => #USE { modules: hd::tl }
+
+js = "`" code:$[^`]+ "`"
+        => #JS { code }
 
 defs // []
     = "let" _ hd:def tl:(_ ";" __ d:def => d)*
@@ -1131,7 +1139,7 @@ keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return" / "yi
     / "new" / "const" / "init" / "base" / "prop" / "me" / "with"
     / "type" / "any" / "enum" / "set" / "dict" / "yes" / "no" / "trait" / "alias"
     / "wise" / "else" / "while" / "repeat" / "each" / "next" / "break" / "when" / "resume"
-    / "in" / "by" / "or" / "xor" / "global" / "async" / "defer") ![A-Za-z0-9_]
+    / "in" / "by" / "or" / "xor" / "global" / "async" / "defer" / "use") ![A-Za-z0-9_]
 
 assignmentOp = ":=" / "*=" / "/=" / "%=" / "+=" / "-=" / "++="
 colon = $(":" ![=:])

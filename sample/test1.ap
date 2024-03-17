@@ -1,0 +1,6 @@
+use runtime1
+
+var list [int]
+mut list push 2
+mut list push 5
+list sum \ print

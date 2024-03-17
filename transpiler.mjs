@@ -1,62 +1,18 @@
 // Transpiler to Javascript
 
-const grammar = require("./generated/grammar.out");
-const debug = require("./debug");
-const tree = require("./tree")
+import { dump, pretty } from "./debug.mjs"
+import * as tree from "./tree.mjs"
 
-function transpile(code)
+export function transpile(codeTree)
 {
-    try
-    {
-        const parsed = grammar.parse(code)
+    dump(codeTree)
 
-        if (tree.is(parsed, tree.MODULE)) {
-            for (const statement of parsed.statements)
-                console.log(toJS(statement));
-        }
-        else
-            console.log(toJS(parsed))
-        //debug.dump(parsed)
+    if (tree.is(codeTree, tree.MODULE)) {
+        for (const statement of codeTree.statements)
+            console.log(toJS(statement));
     }
-    catch (e) {
-        if (e.location)
-        {
-            const lines = code.split(/\r?\n/);
-            const {start, end} = e.location
-            console.log(lines[start.line - 1])
-            if (end.line > start.line)
-            {
-                if (end.line - start.line > 2)
-                    console.log("...")
-                else if (end.line - start.line === 2)
-                    console.log(lines[start.line])
-
-                console.log(lines[end.line - 1])
-                if (end.column === 1)
-                    console.log("^")
-                else
-                    console.log("~".repeat(end.column - 1))
-            }
-            else if (end.column > start.column + 1)
-            {
-                console.log(" ".repeat(start.column - 1) + "~".repeat(end.column - start.column))
-            }
-            else
-                console.log(" ".repeat(start.column - 1) + "^")
-
-            console.log(`line ${end.line}: `+ e.message
-                .replace("[A-Za-z]", "identifier")
-                .replace("[A-Za-z0-9_]", "more letters")
-                .replace("[0-9]", "number")
-                .replace("[ \\t\\r\\n]", "end of line")
-                .replace("[ \\t]", "space")
-                .replace("\"\\n\"", "end of line")
-                .replace("\"/*\", ", "")
-                .replace("\"//\", ", ""))
-        }
-        else
-            console.log(e)
-    }
+    else
+        console.log(toJS(codeTree))
 }
 
 function toJS(node)
@@ -66,7 +22,7 @@ function toJS(node)
         if (node === null)
             return "<null>"
         const nodeType = typeof(node)
-        return "<" + nodeType + " " + debug.pretty(node).substring(0, 20) + ">"
+        return "<" + nodeType + " " + pretty(node).substring(0, 20) + ">"
     }
 
     const map = mapJS[node._]
@@ -195,10 +151,14 @@ function idToJS(id) {
 
 const startId = /^[A-Za-z_]/
 
-mapJS = {
+const mapJS = {
     MODULE: (leaf) => {
         return leaf.statements.map(statement => toJS(statement)).join("\n")
     },
+    USE: (leaf) => {
+        return "/* use " + leaf.modules.join(", ") + "*/"
+    },
+    JS: (leaf) => leaf.code,
     CONST_DEF: (leaf) => {
         let result = "const "
         if (leaf.type)
@@ -561,7 +521,3 @@ mapJS = {
             "for (" + toJS(leaf.variable) + " of " + toJS(leaf.key) + ") " + toJS(leaf.body)
     }
 }
-
-module.exports = {
-    transpile
-};

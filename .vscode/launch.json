@@ -13,7 +13,7 @@
                 "<node_internals>/**"
             ],
             "preLaunchTask": "build",
-            "program": "${workspaceFolder}/app.js"
+            "program": "${workspaceFolder}/app.mjs"
         }
     ]
 }

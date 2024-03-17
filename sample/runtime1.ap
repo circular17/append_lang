@@ -1,0 +1,24 @@
+fun left int "+" right int -> int do `left + right` end
+fun left int "-" right int -> int do `left - right` end
+fun left int "*" right int -> int do `left * right` end
+fun left int "/" right int -> int do `left / right` end
+fun left int "%" right int -> int do `left % right` end
+
+sub<T> mut list [T] "push" element T do
+    `list.ref.push(element)`
+end
+
+fun<T> mut list [T] "pop" element T do
+    `list.ref.pop(element)`
+end
+
+fun<T> list [T] "sum" -> T do
+    var result T
+    list each
+    | @x -> result += x
+    result
+end
+
+sub value "print" do
+    `console.log(value)`
+end
