@@ -3,54 +3,92 @@ import { parse as parseGrammar } from "./generated/grammar.out.mjs"
 import * as tree from "./tree.mjs"
 import { transpile } from "./transpiler.mjs"
 import path from "path"
+import { dump, pretty } from "./debug.mjs"
+
+class Project {
+    constructor() {
+        this.modules = []
+    }
+}
+
+class Module {
+    constructor(filename, codeTree) {
+        this.filename = filename
+        this.name = path.parse(filename).name
+        this.codeTree = codeTree
+        this.dependOn = []
+    }
+}
+
+class Dependency {
+    constructor(moduleName) {
+        this.moduleName = moduleName
+        this.module = null
+    }
+}
 
 export async function readProject(mainFilename, autoUse) {
-    var project = {
-        modules: []
-    }
+    var project = new Project
     var filesToRead = [mainFilename]
     var useAdded = new Set
+    var error = false
     while (filesToRead.length > 0) {
         const filename = filesToRead.shift()
+        console.log("Reading " + filename)
         try {
             const sourceCode = await promises.readFile(filename, 'utf8')
-            const module = parseModule(sourceCode)
-            if (!tree.is(module, tree.MODULE))
+            const codeTree = parseModule(sourceCode)
+            if (!tree.is(codeTree, tree.MODULE))
                 throw new Error("Expecting module")
+            const module = new Module(filename, codeTree)
     
             var useList = new Set(autoUse)
-            module.statements
+            codeTree.statements
             .filter(m => tree.is(m, tree.USE))
             .forEach(use => 
                 use.modules.forEach(n => useList.add(n))
             )
     
-            var depend = []
-            useList.forEach(u => depend.push({ name: u }))
+            useList.forEach(u => module.dependOn.push(new Dependency(u)))
             
-            for (const m of depend) {
-                if (!useAdded.has(m.name)) {
-                    useAdded.add(m.name)
-                    filesToRead.push(path.join(path.dirname(filename), m.name + ".ap"))
+            for (const m of module.dependOn) {
+                if (!useAdded.has(m.moduleName)) {
+                    useAdded.add(m.moduleName)
+                    filesToRead.push(path.join(path.dirname(filename), m.moduleName + ".ap"))
                 }
             }
     
-            project.modules.push({
-                filename,
-                module,
-                depend
-            })            
+            project.modules.push(module)
         }
         catch (e) {
-            console.log("Error reading " + filename)
+            error = true
             console.log(e)
         }
     }
+
+    if (error)
+        return null
+
+    for (const m of project.modules) {
+        for (const d of m.dependOn) {
+            const { moduleName } = d
+            for (const m2 of project.modules) {
+                if (m2.name == moduleName) {
+                    d.module = m2
+                }
+            }
+        }
+    }
+
+    dump(project.modules[0])
+
     for (const m of project.modules)
     {
-        console.log(m)
-        transpile(m.module)
+        console.log(m.filename + " => JS")
+        transpile(m.codeTree)
     }
+    
+    return project
 }
 
 function parseModule(sourceCode)
