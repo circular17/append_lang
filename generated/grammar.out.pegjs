@@ -149,17 +149,31 @@ fun
         tree.fixFunction(f, error)
         return f
     }
+    / isGlobal:isGlobal kind:funKind __ name:funName __ "=" __ expr:valueExpr
+    { return tree.leaf(tree.FUN_DEF, {
+        isGlobal,
+        kind,
+        name,
+        genericParams: [],
+        expr,
+        returnType: "kind" === "sub" ? tree.leaf(tree.VOID_TYPE, {}, error): tree.leaf(tree.ANY_TYPE, {}, error)
+    }, error) }
+    / isGlobal:isGlobal kind:funKind __ name:funName __ "=>" __ body:valueExpr
+    { return tree.leaf(tree.FUN_DEF, {
+        isGlobal,
+        kind,
+        name,
+        genericParams: [],
+        body,
+        returnType: "kind" === "sub" ? tree.leaf(tree.VOID_TYPE, {}, error): tree.leaf(tree.ANY_TYPE, {}, error)
+    }, error) }
 
 funHeader
     = isGlobal:isGlobal isAsync:isAsync purity:purity
-    kind:funKind _ genericParams:traitConstraints _ hd:funParam __ "\"" keywordName:$(keyword?) name:(id / overridableOp)? "\""
+    kind:funKind _ genericParams:traitConstraints _ hd:funParam __ "\"" name:funName "\""
     tl:(__ p:params { return p })? returnType:(__ "->" __ t:type { return t })?
-    effects:(__ "with" _ e:identifiers { return e })? {
-        if (keywordName)
-            error(`The keyword '${keywordName}' cannot be used as an identifier`)
-        if (!name)
-            error("The name of the function is not specified")
-        return tree.leaf(tree.FUN_DEF, {
+    effects:(__ "with" _ e:identifiers { return e })?
+        { return tree.leaf(tree.FUN_DEF, {
             isGlobal,
             isAsync,
             purity,
@@ -169,7 +183,14 @@ funHeader
             params: [hd].concat(tl ?? []),
             effects: effects ?? [],
             returnType: returnType ?? (kind === "sub" ? tree.leaf(tree.VOID_TYPE, {}, error): tree.leaf(tree.ANY_TYPE, {}, error))
-        }, error)
+        }, error) }
+
+funName = keywordName:$(keyword?) name:(id / overridableOp)? {
+        if (keywordName)
+            error(`The keyword '${keywordName}' cannot be used as an identifier`)
+        if (!name)
+            error("The name of the function is not specified")
+        return name
     }
 
 isGlobal
@@ -460,7 +481,7 @@ unionType
         if (tl.length > 0) {
             const types = [hd].concat(tl)
             if (types.some(t => tree.is(t, tree.VOID_TYPE)))
-                error("Void type cannot be in an union")
+                error("Void type cannot be in a union")
             return tree.leaf(tree.UNION_TYPE, { types }, error)
         }
         else
@@ -468,18 +489,14 @@ unionType
     }
 
 functionType
-    = isAsync:isAsync purity:purity kind:funKind params:functionTypeParams? {
-        if (kind == "enum")
-            error("Function kind cannot be enum")
+    = isAsync:isAsync purity:purity "fun" params:functionTypeParams? {
         var fixedParams = params ?? [tree.leaf(tree.VOID_TYPE, {}, error)]
-        if (kind == "fun" && (fixedParams.length <= 1))
+        if (fixedParams.length <= 1)
             error("Function need an input and a return type")
-        if (kind == "sub")
-            fixedParams.push(tree.leaf(tree.VOID_TYPE, {}, error))
         return tree.leaf(tree.FUN_TYPE, {
                 isAsync,
                 purity,
-                kind,
+                kind: "fun",
                 params: fixedParams.slice(0, fixedParams.length - 1),
                 returnType: fixedParams[fixedParams.length - 1]
         }, error)
@@ -804,20 +821,13 @@ otherTerm
 
 term = call
 
-call
-    = c:nestedCall {
-        if (tree.is(c, tree.CURRY_PARAM))
-            error("Curry parameter cannot be used without call")
-        return c
-    }
+call = nestedCall
 
 nestedCall
-    = left:(callParam / curryParam) appendCall:appendCall? {
+    = left:callParam appendCall:appendCall? {
         if (appendCall)
         {
             appendCall.params.unshift(left)
-            if (appendCall.params.some(p => tree.is(p, tree.CURRY_PARAM)))
-                appendCall._ = tree.CURRIED_FUN
             return appendCall
         }
         else
@@ -836,9 +846,6 @@ appendCall
 rightParams
     = _ hd:nestedCall tl:(_ ";" __ c:nestedCall { return c })*
         { return [hd].concat(tl) }
-
-curryParam
-    = "_" ![_A-Za-z0-9] { return tree.leaf(tree.CURRY_PARAM, { }, error) }
 
 callParam = setDiff
 

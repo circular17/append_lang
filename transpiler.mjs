@@ -5,8 +5,6 @@ import * as tree from "./tree.mjs"
 
 export function transpile(codeTree)
 {
-    dump(codeTree)
-
     if (tree.is(codeTree, tree.MODULE)) {
         for (const statement of codeTree.statements)
             console.log(toJS(statement));
@@ -208,10 +206,14 @@ const mapJS = {
         return leaf.name
     },
     FUN_DEF: (leaf) => {
-        let params = 
+        let params
+        if (leaf.params) 
+            params = 
             leaf.params.length === 1 && tree.is(leaf.params[0].type, tree.VOID_TYPE) 
             ? "()"
             : "(" + leaf.params.map(p => toJS(p)).join(", ") + ")"
+        else
+          params = "?"
         params += " /*: " + toJS(leaf.returnType) + " */"
         if (leaf.effects && leaf.effects.length > 0) params += " /* with effects */"
         let body = toJS(leaf.body)
@@ -233,22 +235,6 @@ const mapJS = {
     },
     FUN_PARAM_DEF: (leaf) => {
         return "/* " + toJS(leaf.type) + " */ " + leaf.names.map(n => toJS(n)).join(", ")
-    },
-    CURRIED_FUN: (leaf) => {
-        let curryParams = [];
-        let callParams = [];
-        for (const param of leaf.params) {
-            if (tree.is(param, tree.CURRY_PARAM)) {
-                const curryParam = "$" + String.fromCharCode(97 + curryParams.length);
-                curryParams.push(curryParam);
-                callParams.push(curryParam);
-            }
-            else
-                callParams.push(toJS(param));
-        }
-        //const effectStr = leaf.effects.length == 0 ? "" : ", /* effects */ " + leaf.effects.map(p => toJS(p)).join(", ");
-        return "function (" + curryParams.join(", ") + ") { return " +
-            toJS(leaf.fun) + "(" + callParams.join(", ") + "); }";
     },
     INLINE_ENUM: (leaf) => {
         let body = toJS(leaf.body)

@@ -85,6 +85,8 @@ trait<T (+)> Scalable { // may be ambiguous with Multipliable
 
 fun a (+)&(*) "addSquare" b (+)&(*) -> (+)&(*) => a*a + b*b
 
+let five = 3 addSquare 4
+
 fun<T int-Scalable> u T "double" -> T => u * 2
 
 fun<T> a T "addSquare" b T -> T => a*a + b*b
@@ -125,8 +127,8 @@ end
 sub mut x "inc" => mut x + 1
 mut a inc
 
-let square = :x => x * x
-var subroutine sub
+fun square = :x => x * x
+var subroutine fun(()->())
 var linkedList int<> = 12::34::67::<>
 linkedList head
 | #none -> "linked list is empty" print
@@ -158,7 +160,7 @@ mut setOfStr del "four"
 var dictionary dict{int -> str}-lookup = dict{5 -> "five", 7 -> "seven"}
 let ZERO = 0. let ONE int = 1
 type<T> circle T
-let h = f >> g
+fun h = f >> g
 let multi = 2 add 3 squared; 4 cubed
 //let piped = 2 add 3 \ squared
 
@@ -168,11 +170,10 @@ fun () "three" => 3
 
 fun x "add" y int -> int => x + y
 
-let addFun fun(int -> int -> int) = add
+fun addFun = add
 
-let plusOne fun(int -> int) = 1 add _
-let plusOne fun(int -> int) = 1 add
-let plusOne = => $x add 1
+fun plusOne = 1 add
+fun plusOne = => $x add 1
 fun x "plusOne" => x add 1
 
 // matching
@@ -385,7 +386,7 @@ enum<T> a T-enum "filter" predicate fun(T-> bool-ok | err) -> T do
 end
 
 fun list "filterEven" => list filter => $x % 2 = 0
-let filterEven = _ filter => $x % 2 = 0
+fun filterEven => $a filter => $x % 2 = 0
 
 fun<T> a T-enum "toList" -> [T]-ok | err do
     var b [T]
@@ -419,6 +420,8 @@ fun<T> lst T-enum "iter" action fun(T -> any) -> done | any-err do
     | @error -> return error
     #done
 end
+
+[1, 2, 3] iter sub => print $x
 
 fun<T, U> keys set{T} "associate" f fun(T -> U) -> dict{T -> U} do
     var result dict{T -> U} = dict{}

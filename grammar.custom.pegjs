@@ -149,17 +149,31 @@ fun
         tree.fixFunction(f, error)
         return f
     }
+    / isGlobal:isGlobal kind:funKind __ name:funName __ "=" __ expr:valueExpr
+    => #FUN_DEF {
+        isGlobal,
+        kind,
+        name,
+        genericParams: [],
+        expr,
+        returnType: "kind" === "sub" ? #VOID_TYPE {}: #ANY_TYPE {}
+    }
+    / isGlobal:isGlobal kind:funKind __ name:funName __ "=>" __ body:valueExpr
+    => #FUN_DEF {
+        isGlobal,
+        kind,
+        name,
+        genericParams: [],
+        body,
+        returnType: "kind" === "sub" ? #VOID_TYPE {}: #ANY_TYPE {}
+    }
 
 funHeader
     = isGlobal:isGlobal isAsync:isAsync purity:purity
-    kind:funKind _ genericParams:traitConstraints _ hd:funParam __ "\"" keywordName:$(keyword?) name:(id / overridableOp)? "\""
+    kind:funKind _ genericParams:traitConstraints _ hd:funParam __ "\"" name:funName "\""
     tl:(__ p:params => p)? returnType:(__ "->" __ t:type => t)?
-    effects:(__ "with" _ e:identifiers => e)? {
-        if (keywordName)
-            error(`The keyword '${keywordName}' cannot be used as an identifier`)
-        if (!name)
-            error("The name of the function is not specified")
-        return #FUN_DEF {
+    effects:(__ "with" _ e:identifiers => e)?
+        => #FUN_DEF {
             isGlobal,
             isAsync,
             purity,
@@ -170,6 +184,13 @@ funHeader
             effects: effects ?? [],
             returnType: returnType ?? (kind === "sub" ? #VOID_TYPE {}: #ANY_TYPE {})
         }
+
+funName = keywordName:$(keyword?) name:(id / overridableOp)? {
+        if (keywordName)
+            error(`The keyword '${keywordName}' cannot be used as an identifier`)
+        if (!name)
+            error("The name of the function is not specified")
+        return name
     }
 
 isGlobal
@@ -460,7 +481,7 @@ unionType
         if (tl.length > 0) {
             const types = hd::tl
             if (types.some(t => tree.is(t, tree.VOID_TYPE)))
-                error("Void type cannot be in an union")
+                error("Void type cannot be in a union")
             return #UNION_TYPE { types }
         }
         else
@@ -468,18 +489,14 @@ unionType
     }
 
 functionType
-    = isAsync:isAsync purity:purity kind:funKind params:functionTypeParams? {
-        if (kind == "enum")
-            error("Function kind cannot be enum")
+    = isAsync:isAsync purity:purity "fun" params:functionTypeParams? {
         var fixedParams = params ?? [#VOID_TYPE {}]
-        if (kind == "fun" && (fixedParams.length <= 1))
+        if (fixedParams.length <= 1)
             error("Function need an input and a return type")
-        if (kind == "sub")
-            fixedParams.push(#VOID_TYPE {})
         return #FUN_TYPE {
                 isAsync,
                 purity,
-                kind,
+                kind: "fun",
                 params: fixedParams.slice(0, fixedParams.length - 1),
                 returnType: fixedParams[fixedParams.length - 1]
         }
@@ -804,20 +821,13 @@ otherTerm
 
 term = call
 
-call
-    = c:nestedCall {
-        if (tree.is(c, tree.CURRY_PARAM))
-            error("Curry parameter cannot be used without call")
-        return c
-    }
+call = nestedCall
 
 nestedCall
-    = left:(callParam / curryParam) appendCall:appendCall? {
+    = left:callParam appendCall:appendCall? {
         if (appendCall)
         {
             appendCall.params.unshift(left)
-            if (appendCall.params.some(p => tree.is(p, tree.CURRY_PARAM)))
-                appendCall._ = tree.CURRIED_FUN
             return appendCall
         }
         else
@@ -836,9 +846,6 @@ appendCall
 rightParams
     = _ hd:nestedCall tl:(_ ";" __ c:nestedCall => c)*
         => hd::tl
-
-curryParam
-    = "_" ![_A-Za-z0-9] => #CURRY_PARAM { }
 
 callParam = setDiff
 

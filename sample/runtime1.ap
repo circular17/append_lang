@@ -1,3 +1,4 @@
+
 fun left int "+" right int -> int do `left + right` end
 fun left int "-" right int -> int do `left - right` end
 fun left int "*" right int -> int do `left * right` end
@@ -32,10 +33,10 @@ end
 fun<T> list [T] "sum" -> T do
     var result T
     list each
-    | @x -> result += x
+    | @x -> mut result + x
     result
 end
 
-sub value "print" do
+state sub value "print" do
     `console.log(value)`
 end

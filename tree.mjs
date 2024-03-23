@@ -13,6 +13,12 @@ function check(tree, error)
                 error("Void type cannot be specified for constants and variables")
             if (is(tree.type, GENERIC_PARAM_TYPE))
                 error("Generic parameters cannot be used in constants and variables")
+            if (is(tree, CONST_DEF)) {
+                if (is(tree.type, FUN_TYPE) || is(tree.value, FUN_DEF)
+                  || is(tree.value, COMPOSE)) {
+                    error("Constants cannot be of function type. Declare them with 'fun' instead.")
+                }
+            }
             break
 
         case TYPE_DEF:
@@ -28,11 +34,13 @@ function check(tree, error)
         case FUN_DEF:
             if (tree.kind === "sub" && !is(tree.returnType, VOID_TYPE))
                 error("Subroutines should have a void return type")
-            if (tree.params.length === 0 && tree.name !== "new")
-                error("Functions always have a parameter (can be void)")
-            for (let i = 1; i < tree.params.length; i++)
-                if (is(tree.params[i].type, VOID_TYPE))
-                    error("Void type is only allowed for the first parameter")
+            if (tree.params) {
+                if (tree.params.length === 0 && tree.name !== "new")
+                    error("Functions always have a parameter (can be void)")
+                for (let i = 1; i < tree.params.length; i++)
+                    if (is(tree.params[i].type, VOID_TYPE))
+                        error("Void type is only allowed for the first parameter")
+            }
             break
 
         case FOR_EACH:
@@ -266,8 +274,6 @@ export const YIELD = "YIELD"
 export const YIELD_IN = "YIELD_IN"
 export const COMPOSE = "COMPOSE"
 export const CALL = "CALL"
-export const CURRY_PARAM = "CURRY_PARAM"
-export const CURRIED_FUN = "CURRIED_FUN"
 export const INTEGER = "INTEGER"
 export const FLOAT = "FLOAT"
 export const DICT_VALUE = "DICT_VALUE"
@@ -375,8 +381,6 @@ const leafName = {
     YIELD: "yield statement",
     YIELD_IN: "recursive yield statement",
     CALL: "function call",
-    CURRY_PARAM: "curry parameter",
-    CURRIED_FUN: "curried function",
     INTEGER: "integer",
     FLOAT: "floating point value",
     DICT_VALUE: "dictionary value",
