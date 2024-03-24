@@ -21,51 +21,6 @@ class Module {
         this.name = path.parse(filename).name
         this.codeTree = codeTree
         this.dependOn = []
-        this.findIdentifiersRec(codeTree)
-    }
-
-    findIdentifiersRec(element) {
-        element.types = new Map
-        element.functions = new Map
-        element.properties = new Map
-        element.variables = new Map
-        if (tree.is(element, tree.MODULE)) {
-            this.findIdentifiers(element, element.statements)
-        }
-    }
-
-    findIdentifiers(element, content) {
-        if (Array.isArray(content)) {
-            for (const statement of element.statements) {
-                this.findIdentifiers(element, statement)
-            }
-        } else if (tree.is(content, tree.TYPE_DEF)) {
-            const typeDef = content
-            if (!element.types.has(typeDef.name))
-                element.types.set(typeDef.name, [])
-            element.types.get(typeDef.name).push(typeDef)
-        } else if (tree.is(content, tree.FUN_DEF)) {
-            const funDef = content
-            if (!element.functions.has(funDef.name))
-                element.functions.set(funDef.name, [])
-            element.functions.get(funDef.name).push(funDef)
-        } else if (tree.is(content, tree.PROP_DEF)) {
-            const propDef = content
-            if (element.properties.has(propDef.name))
-                tree.leafError(content, `Duplicate property name`,
-                    element.properties.get(propDef.name))
-            element.properties.set(propDef.name, propDef)
-        } else if (tree.is(content, tree.CONST_DEF) ||
-                tree.is(content, tree.VAR_DEF)) {
-            const def = content
-            for (const [name, member] of def.deconstructNames)
-            {
-                if (element.variables.has(name))
-                    tree.leafError(member, `Duplicate variable name ${name}`,
-                        element.variables.get(name))
-                element.variables.set(name, member)
-            }
-        }
     }
 }
 

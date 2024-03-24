@@ -48,9 +48,63 @@ function check(tree, error)
         case REPEAT:
         case WHILE:
             findContinueBreak(tree.body, (node) => node.loop = tree)
+            break
+
+        case MODULE:
+        case WISE_BLOCK:
+        case CODE_BLOCK:
+            listIdentifiers(tree)
+            break
     }
 
     return tree
+}
+
+function listIdentifiers(element) {
+    element.types = new Map
+    element.traits = new Map
+    element.functions = new Map
+    element.properties = new Map
+    element.variables = new Map
+    for (const statement of element.statements) {
+        addIdentifiersFor(element, statement)
+    }
+}
+
+function addIdentifiersFor(element, content)
+{
+    if (is(content, TYPE_DEF)) {
+        const typeDef = content
+        if (!element.types.has(typeDef.name))
+            element.types.set(typeDef.name, [])
+        element.types.get(typeDef.name).push(typeDef)
+    } else if (is(content, TRAIT_DEF)) {
+        const traitDef = content
+        if (!element.traits.has(traitDef.name))
+            element.traits.set(traitDef.name, [])
+        element.traits.get(traitDef.name).push(traitDef)
+    } else if (is(content, FUN_DEF)) {
+        const funDef = content
+        if (!element.functions.has(funDef.name))
+            element.functions.set(funDef.name, [])
+        element.functions.get(funDef.name).push(funDef)
+    } else if (is(content, PROP_DEF)) {
+        const propDef = content
+        if (element.properties.has(propDef.name))
+            leafError(content, `Duplicate property name`,
+                element.properties.get(propDef.name))
+        element.properties.set(propDef.name, propDef)
+    } else if (is(content, CONST_DEF) ||
+            is(content, VAR_DEF)) {
+        const def = content
+        for (const [name, member] of def.deconstructNames)
+        {
+            if (element.variables.has(name))
+                leafError(member, `Duplicate variable name ${name}`,
+                    element.variables.get(name))
+            element.variables.set(name, member)
+        }
+    }
 }
 
 function addUnique(map, key, value, error) {
