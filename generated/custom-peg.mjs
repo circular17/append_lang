@@ -321,7 +321,7 @@ function peg$parse(input, options) {
   var peg$f11 = function(head, tail) {
         return `[${head}].concat(${tail})` };
   var peg$f12 = function(kind, content) {
-        return `tree.leaf(tree.${kind}, ${content}, error)`
+        return `tree.leaf(tree.${kind}, ${content}, error, location())`
     };
   var peg$f13 = function(tokens) { return tokens.join("") };
   var peg$f14 = function() { return text() };

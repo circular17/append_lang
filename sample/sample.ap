@@ -29,10 +29,10 @@ var point = #vec2 (12.5, 8)
 type<T (+) & (*)> point {| x T, y T |}
 type<T> point3 {| ...T-point, z T |}
 var pointStruct = #float-point {| x: 3, y: 45.4 |}
-global fun<T> p1 T-point "+" p2 T-point
+export fun<T> p1 T-point "+" p2 T-point
     => #T-point {| x: p1.x + p2.x, y: p1.y + p2.y |}
 let {| x: myX, y: myY, coords: (a, b, c) |} = pointStruct
-var {| x, y |} = pointStruct <| x: 4
+var {| x2, y2 |} = pointStruct <| x: 4
 let xOnly = pointStruct <| !y
 mut pointStruct.y = 6
 let problematic str = "this {a}"
@@ -206,8 +206,8 @@ fun list "foldr" acc f => list
 
 fun list "sumList" => list foldr 0 (+)
 
-let (x, y) = (2, 3)
-x + y
+let (x3, y3) = (2, 3)
+x3 + y3
 
 (2, 3) | (@x, @y) -> x + y
 (2, 3)

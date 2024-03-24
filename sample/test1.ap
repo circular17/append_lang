@@ -1,5 +1,9 @@
 use runtime1
 
+sub () "who" => "this is test1" print
+
+() who
+
 var n = 5
 
 var list [int]

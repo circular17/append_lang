@@ -1,42 +1,44 @@
 
-fun left int "+" right int -> int do `left + right` end
-fun left int "-" right int -> int do `left - right` end
-fun left int "*" right int -> int do `left * right` end
-fun left int "/" right int -> int do `left / right` end
-fun left int "%" right int -> int do `left % right` end
+sub () "who" => "this is runtime1" print
 
-sub<T> mut list1 [T] "++" list2 T do
+export fun left int "+" right int -> int do `left + right` end
+export fun left int "-" right int -> int do `left - right` end
+export fun left int "*" right int -> int do `left * right` end
+export fun left int "/" right int -> int do `left / right` end
+export fun left int "%" right int -> int do `left % right` end
+
+export sub<T> mut list1 [T] "++" list2 T do
     `list1.ref.push(...list2)`
 end
 
-sub<T> list1 [T] "++" mut list2 T do
+export sub<T> list1 [T] "++" mut list2 T do
     `list2.ref.unshift(...list1)`
 end
 
 
-sub<T> mut list [T] "push" element T do
+export sub<T> mut list [T] "push" element T do
     `list1.ref.push(element)`
 end
 
-sub<T> mut list [T] "unshift" element T do
+export sub<T> mut list [T] "unshift" element T do
     `list1.ref.unshift(element)`
 end
 
-fun<T> mut list [T] "pop" -> T do
+export fun<T> mut list [T] "pop" -> T do
     `list.ref.pop()`
 end
 
-fun<T> mut list [T] "shift" -> T do
+export fun<T> mut list [T] "shift" -> T do
     `list.ref.shift()`
 end
 
-fun<T> list [T] "sum" -> T do
+export fun<T> list [T] "sum" -> T do
     var result T
     list each
     | @x -> mut result + x
     result
 end
 
-state sub value "print" do
+export state sub value "print" do
     `console.log(value)`
 end

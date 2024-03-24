@@ -33,7 +33,7 @@
 		"keywords": {
 			"patterns": [{
 				"name": "keyword.control.append",
-				"match": "\\b(let|var|fun|sub|mut|do|end|return|yield|state|new|const|init|base|prop|me|with|type|any|enum|set|dict|yes|no|trait|alias|wise|else|while|repeat|each|next|break|when|resume|in|by|or|xor|global|async|defer)\\b"
+				"match": "\\b(let|var|fun|sub|mut|do|end|return|yield|state|new|const|init|base|prop|me|with|type|any|enum|set|dict|yes|no|trait|alias|wise|else|while|repeat|each|next|break|when|resume|in|by|or|xor|export|use|async|defer)\\b"
 			}]
 		},
 		"strings": {

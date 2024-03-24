@@ -14,11 +14,12 @@ function check(tree, error)
             if (is(tree.type, GENERIC_PARAM_TYPE))
                 error("Generic parameters cannot be used in constants and variables")
             if (is(tree, CONST_DEF)) {
-                if (is(tree.type, FUN_TYPE) || is(tree.value, FUN_DEF)
+                if (is(tree.type, FUN_TYPE) || is(tree.value, FUN_DEF)
                   || is(tree.value, COMPOSE)) {
                     error("Constants cannot be of function type. Declare them with 'fun' instead.")
                 }
             }
+            findDeconstructNames(tree, error)
             break
 
         case TYPE_DEF:
@@ -50,6 +51,43 @@ function check(tree, error)
     }
 
     return tree
+}
+
+function addUnique(map, key, value, error) {
+    if (map.has(key))
+        error("Duplicate identifier in declaration")
+    map.set(key, value)
+}
+
+function findDeconstructNames(def, error) {
+    def.deconstructNames = new Map
+    if (is(def.names, NAMES)) {
+        for (const identifier of def.names.identifiers) {
+            addUnique(def.deconstructNames,
+                identifier.name, identifier,
+                error)
+        }
+    } else
+        findVariableDeconstructNames(def, def.names, error)
+}
+
+function findVariableDeconstructNames(def, deconstruct, error) {
+    if (is(deconstruct, DECONSTRUCT_RECORD) || is(deconstruct, DECONSTRUCT_TUPLE)) {
+        for (const elem of deconstruct.elements) {
+            findVariableDeconstructNames(def, elem, error)
+        }
+    } else if (is(deconstruct, DECONSTRUCT_NAME)) {
+        addUnique(def.deconstructNames,
+            deconstruct.name, deconstruct,
+            error)
+    } else if (is(deconstruct, DECONSTRUCT_MEMBER)) {
+        if (deconstruct.deconstructValue)
+            findVariableDeconstructNames(def, deconstruct.deconstructValue, error)
+        else
+            addUnique(def.deconstructNames,
+                deconstruct.memberName, deconstruct,
+                error)
+    }
 }
 
 export function findContinueBreak(tree, callback) {
@@ -87,7 +125,7 @@ export function fixFunction(f, error)
         const params = f.params.filter(p => !is(p.type, VOID_TYPE))
             .flatMap(p =>
                 p.names.map(
-                    n => leaf(RESOLVED_VARIABLE, { ref: n }, error)
+                    n => leaf(RESOLVED_VARIABLE, { ref: n }, error, f.body.location)
                 )
             )
         if (params.length === 0)
@@ -97,7 +135,7 @@ export function fixFunction(f, error)
         else
             f.body.key = leaf(TUPLE, {
                 values: params
-            }, error)
+            }, error, f.body.location)
     }
     if (f.kind === "fun")
         f.body = addLastReturn(f.body, error)
@@ -135,7 +173,7 @@ function addLastReturn(body, error)
     }
     else if (!is(body, TYPE_DEF) && !is(body, TRAIT_DEF) && !is(body, ALIAS_DEF)
         && !is(body, VAR_DEF) && !is(body, FUN_DEF) && !is(body, RETURN))
-        return leaf(RETURN, { value: body }, error)
+        return leaf(RETURN, { value: body }, error, body.location)
 
     return body
 }
@@ -199,14 +237,26 @@ export function is(tree, kind)
     return tree._ === kind
 }
 
-export function leaf(kind, leaf, error)
+export function leaf(kind, leaf, error, location)
 {
     if (!error)
         throw new Error("Error function not provided")
+    if (!location)
+        throw new Error("Location not provided")
     if (!kind)
         throw new Error("Kind is not defined")
     leaf._ = kind
+    leaf.location = location
     return check(leaf, error)
+}
+
+export function leafError(leaf, message, otherLeaf) {
+    let e = new Error(message)
+    e.location = leaf.location
+    if (otherLeaf) {
+        e.otherLocation = otherLeaf.location
+    }
+    throw e
 }
 
 export const MODULE = "MODULE"

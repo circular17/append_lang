@@ -116,7 +116,7 @@ HeadTail
 
 Leaf
     = "#" _ kind:Identifier _ content:CodeBlock {
-        return `tree.leaf(tree.${kind}, ${content}, error)`
+        return `tree.leaf(tree.${kind}, ${content}, error, location())`
     }
 
 Code

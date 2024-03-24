@@ -62,8 +62,8 @@ deconstruct
         => #DECONSTRUCT_RECORD { elements: hd::tl }
 
 deconstructMember
-    = member:id value:(_ colon __ e:(deconstructElement / deconstruct) => e)?
-        => #DECONSTRUCT_MEMBER { member, value }
+    = memberName:id decontructValue:(_ colon __ e:(deconstructElement / deconstruct) => e)?
+        => #DECONSTRUCT_MEMBER { memberName, decontructValue }
 
 deconstructElement
     = id:id => #DECONSTRUCT_NAME { name: id }
@@ -149,18 +149,18 @@ fun
         tree.fixFunction(f, error)
         return f
     }
-    / isGlobal:isGlobal kind:funKind __ name:funName __ "=" __ expr:valueExpr
+    / visibility:visibility kind:funKind __ name:funName __ "=" __ expr:valueExpr
     => #FUN_DEF {
-        isGlobal,
+        visibility,
         kind,
         name,
         genericParams: [],
         expr,
         returnType: "kind" === "sub" ? #VOID_TYPE {}: #ANY_TYPE {}
     }
-    / isGlobal:isGlobal kind:funKind __ name:funName __ "=>" __ body:valueExpr
+    / visibility:visibility kind:funKind __ name:funName __ "=>" __ body:valueExpr
     => #FUN_DEF {
-        isGlobal,
+        visibility,
         kind,
         name,
         genericParams: [],
@@ -169,12 +169,12 @@ fun
     }
 
 funHeader
-    = isGlobal:isGlobal isAsync:isAsync purity:purity
+    = visibility:visibility isAsync:isAsync purity:purity
     kind:funKind _ genericParams:traitConstraints _ hd:funParam __ "\"" name:funName "\""
     tl:(__ p:params => p)? returnType:(__ "->" __ t:type => t)?
     effects:(__ "with" _ e:identifiers => e)?
         => #FUN_DEF {
-            isGlobal,
+            visibility,
             isAsync,
             purity,
             kind,
@@ -193,9 +193,9 @@ funName = keywordName:$(keyword?) name:(id / overridableOp)? {
         return name
     }
 
-isGlobal
-    = "global" _ => true
-    / "" => false
+visibility
+    = "export" _ => "export"
+    / "" => "normal"
 
 isAsync
     = "async" _ => true
@@ -1128,7 +1128,7 @@ keyword = ("let" / "var" / "fun" / "sub" / "mut" / "do" / "end" / "return" / "yi
     / "new" / "const" / "init" / "base" / "prop" / "me" / "with"
     / "type" / "any" / "enum" / "set" / "dict" / "yes" / "no" / "trait" / "alias"
     / "wise" / "else" / "while" / "repeat" / "each" / "next" / "break" / "when" / "resume"
-    / "in" / "by" / "or" / "xor" / "global" / "async" / "defer" / "use") ![A-Za-z0-9_]
+    / "in" / "by" / "or" / "xor" / "export" / "async" / "defer" / "use") ![A-Za-z0-9_]
 
 colon = $(":" ![=:])
 

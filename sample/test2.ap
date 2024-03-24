@@ -1,11 +1,11 @@
 use runtime1
 
 type customInt {| const number int |}
-public fun left customInt "+" right customInt -> customInt => {| number: left.number + right.number |}
-public fun left customInt "-" right customInt -> customInt => {| number: left.number - right.number |}
-public fun left customInt "*" right customInt -> customInt => {| number: left.number * right.number |}
-public fun left customInt "/" right customInt -> customInt => {| number: left.number / right.number |}
-public fun left customInt "%" right customInt -> customInt => {| number: left.number % right.number |}
+export fun left customInt "+" right customInt -> customInt => {| number: left.number + right.number |}
+export fun left customInt "-" right customInt -> customInt => {| number: left.number - right.number |}
+export fun left customInt "*" right customInt -> customInt => {| number: left.number * right.number |}
+export fun left customInt "/" right customInt -> customInt => {| number: left.number / right.number |}
+export fun left customInt "%" right customInt -> customInt => {| number: left.number % right.number |}
 
 var customList [customInt]
 mut customList push {| number: 3 |}
