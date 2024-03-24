@@ -23,3 +23,5 @@ if [ "generated/grammar.out.mjs" -ot "generated/grammar.out.pegjs" ]; then
 else
     echo "No need to build append grammar"
 fi
+
+echo "Done."

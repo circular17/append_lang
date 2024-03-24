@@ -451,10 +451,10 @@ const mapJS = {
     EMPTY_LINKED_LIST: function() {
         return "[]"
     },
-    WISE_BLOCK: (leaf) => {
+    WISE: (leaf) => {
         return "{\n" +
             indent("const $ = " + toJS(leaf.key) + "\n" +
-            leaf.statements.map(s => toJS(s)).join("\n"))
+            toJS(leaf.body))
             + "\n}"
     },
     GET_WISE_MEMBER: (leaf) => "$." + leaf.path.join("."),

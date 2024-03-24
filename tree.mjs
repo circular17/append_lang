@@ -51,7 +51,6 @@ function check(tree, error)
             break
 
         case MODULE:
-        case WISE_BLOCK:
         case CODE_BLOCK:
             listIdentifiers(tree)
             break
@@ -60,14 +59,14 @@ function check(tree, error)
     return tree
 }
 
-function listIdentifiers(element) {
-    element.types = new Map
-    element.traits = new Map
-    element.functions = new Map
-    element.properties = new Map
-    element.variables = new Map
-    for (const statement of element.statements) {
-        addIdentifiersFor(element, statement)
+function listIdentifiers(scope) {
+    scope.types = new Map
+    scope.traits = new Map
+    scope.functions = new Map
+    scope.properties = new Map
+    scope.variables = new Map
+    for (const statement of scope.statements) {
+        addIdentifiersFor(scope, statement)
     }
 }
 
@@ -90,6 +89,10 @@ function addIdentifiersFor(element, content)
         element.functions.get(funDef.name).push(funDef)
     } else if (is(content, PROP_DEF)) {
         const propDef = content
+        if (element.variables.has(propDef.name))
+            leafError(content, `A variable is already using this name`,
+                element.variables.get(propDef.name))
+
         if (element.properties.has(propDef.name))
             leafError(content, `Duplicate property name`,
                 element.properties.get(propDef.name))
@@ -99,6 +102,10 @@ function addIdentifiersFor(element, content)
         const def = content
         for (const [name, member] of def.deconstructNames)
         {
+            if (element.properties.has(name))
+            leafError(content, `A property is already using the name ${name}`,
+                element.properties.get(name))
+                
             if (element.variables.has(name))
                 leafError(member, `Duplicate variable name ${name}`,
                     element.variables.get(name))
@@ -201,11 +208,11 @@ function addLastReturn(body, error)
         || is(body, VAR_DEF) || is(body, FUN_DEF) || is(body, RETURN))
         return body
 
-    if (is(body, CODE_BLOCK) || is(body, WISE_BLOCK)) {
+    if (is(body, CODE_BLOCK)) {
         if (body.statements.length > 0)
         {
             const last = body.statements[body.statements.length-1]
-            if (is(last, CODE_BLOCK) || is(last, WISE_BLOCK) ||
+            if (is(last, CODE_BLOCK) || is(last, WISE) ||
                 is(last, TERNARY) || is(last, CASE))
             {
                 addLastReturn(last, error)
@@ -215,6 +222,10 @@ function addLastReturn(body, error)
                 body.statements[body.statements.length-1] = addLastReturn(last, error)
             }
         }
+    }
+    else if (is(body, WISE))
+    {
+        addLastReturn(body.body, error)
     }
     else if (is(body, TERNARY))
     {
@@ -396,7 +407,7 @@ export const RESUME = "RESUME"
 export const LINKED_LIST = "LINKED_LIST"
 export const LINKED_LIST_TYPE = "LINKED_LIST_TYPE"
 export const EMPTY_LINKED_LIST = "EMPTY_LINKED_LIST"
-export const WISE_BLOCK = "WISE_BLOCK"
+export const WISE = "WISE"
 export const GET_WISE_MEMBER = "GET_WISE_MEMBER"
 export const CARTESIAN_PROD = "CARTESIAN_PROD"
 export const CARTESIAN_POWER = "CARTESIAN_POWER"
@@ -503,8 +514,8 @@ const leafName = {
     LINKED_LIST: "linked list value",
     LINKED_LIST_TYPE: "linked list type",
     EMPTY_LINKED_LIST: "empty linked list",
-    WISE_BLOCK: "wise block",
-    GET_WISE_MEMBER: "get member of wise block",
+    WISE: "wise expression",
+    GET_WISE_MEMBER: "get member of wise expression",
     CARTESIAN_PROD: "cartesian product",
     CARTESIAN_POWER: "cartesian power",
     PROP_DEF: "property definition",

@@ -13,7 +13,8 @@ moduleStatements // []
     / "" => []
 
 statement
-    = defs
+    = constDefs
+    / propDef
     / js
     / vars
     / typeDefs
@@ -35,11 +36,11 @@ use = "use" _ hd:id tl:(_ "," __ id:id => id)*
 js = "`" code:$[^`]+ "`"
         => #JS { code }
 
-defs // []
-    = "let" _ hd:def tl:(_ ";" __ d:def => d)*
+constDefs // []
+    = "let" _ hd:constDef tl:(_ ";" __ d:constDef => d)*
         => hd::tl
 
-def
+constDef
     = _ names:(names / deconstruct) _ type:type? _ "=" _ v:branch
         => #CONST_DEF { names, type, value: v }
 
@@ -275,7 +276,7 @@ loopBody
     / return
 
 optionWithPipe
-    = value:pipedExpr option:(ternary / case / wiseBlock / for)? {
+    = value:pipedExpr option:(ternary / case / wise / for)? {
         if (option) {
             option.key = value
             return option
@@ -299,7 +300,7 @@ for
     }
 
 optionNoPipe
-    = value:valueExpr option:(ternary / wiseBlock)? {
+    = value:valueExpr option:(ternary / wise)? {
         if (option) {
             option.key = value
             return option
@@ -309,7 +310,7 @@ optionNoPipe
     }
 
 optionNoCase
-    = value:pipedExpr option:(ternary / wiseBlock / for)? {
+    = value:pipedExpr option:(ternary / wise / for)? {
         if (option) {
             option.key = value
             return option
@@ -328,12 +329,10 @@ optionalTernary
             return value
     }
 
-wiseBlock
-    = _ "wise" __ "{" __ statements:funStatements __ close:"}"? {
-        if (!close)
-            error("Expecting \")\" to close the 'wise' block")
-        return #WISE_BLOCK {
-            statements
+wise
+    = _ "wise" __ body:(branch / inlineBlock / return) {
+        return #WISE {
+            body
         }
     }
 
