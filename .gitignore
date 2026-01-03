@@ -2,3 +2,6 @@
 .DS_Store
 
 highlight/vscode/append-lang-0.0.1.vsix
+/dotnetvm/.vs
+/dotnetvm/Append/obj
+/dotnetvm/Append/bin
