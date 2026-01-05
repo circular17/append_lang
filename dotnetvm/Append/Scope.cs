@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics.CodeAnalysis;
+using System.Text;
 
 namespace Append
 {
@@ -89,17 +90,24 @@ namespace Append
             _types.Clear();
         }
 
-        internal void PrintFunctions()
+        internal string FunctionsToString()
         {
+            var sb = new StringBuilder();
+            bool first = true;
             foreach (var list in _functions.Values)
             {
                 foreach (var f in list)
                     if (!f.IsIntrinsic)
                     {
-                        Console.WriteLine(f.ToString());
-                        Console.WriteLine();
+                        if (first)
+                            first = false;
+                        else
+                            sb.AppendLine();
+
+                        sb.AppendLine(f.ToString());
                     }
             }
+            return sb.ToString();
         }
     }
 }

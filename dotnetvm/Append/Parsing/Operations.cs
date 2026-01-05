@@ -21,20 +21,26 @@
         public const string BitNegationWeak = "not";
         public const string Ternary = "? else";
         public const string Lambda = "=>";
-        public const string Piping = "\\";
+        public const string Piping = "->";
+        public const string Assignment = ":=";
         public const string Case = "|";
+
+        public static bool IsOperatorChar(char c)
+        {
+            return c < '0' || c > '9' && c < 'A'
+                || c > 'Z' && c < 'a'
+                || c > 'z' && c <= '~';
+        }
 
         public static bool IsOperator(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) return false;
 
-            if (name[0] < '0' || name[0] > '9' && name[0] < 'A'
-                || name[0] > 'Z' && name[0] < 'a'
-                || name[0] > 'z' && name[0] <= '~')
+            if (IsOperatorChar(name[0]))
                 return true;
 
-            return name == BitXor || name == BitOr || name == BitNegationWeak;
-
+            return name == BitXor || name == BitOr || name == BitNegationWeak
+                || name == Mutation || name == "else";
         }
 
         public static string[] AllOperations =
@@ -59,21 +65,30 @@
             Ternary,
             Lambda,
             Piping,
+            Assignment,
             Case
         };
 
+        private static readonly int _functionCallPriority = 
+            AllOperations.Length - Array.IndexOf(AllOperations, FunctionCall);
+
         public static int Priorty(string operation)
         {
-            var operationSpace = operation + " ";
-            var spaceOperation = " " + operation;
-            var spaceOperationSpace = " " + operationSpace;
-            for (int i = 0; i < AllOperations.Length; i++)
+            if (IsOperator(operation))
             {
-                if (AllOperations[i] == operation || AllOperations[i].StartsWith(operationSpace)
-                    || AllOperations[i].EndsWith(spaceOperation) || AllOperations[i].Contains(spaceOperationSpace))
-                    return AllOperations.Length - i;
+                var operationSpace = operation + " ";
+                var spaceOperation = " " + operation;
+                var spaceOperationSpace = " " + operationSpace;
+                for (int i = 0; i < AllOperations.Length; i++)
+                {
+                    if (AllOperations[i] == operation || AllOperations[i].StartsWith(operationSpace)
+                        || AllOperations[i].EndsWith(spaceOperation) || AllOperations[i].Contains(spaceOperationSpace))
+                        return AllOperations.Length - i;
+                }
+                return 0;
             }
-            return 0;
+            else
+                return _functionCallPriority;
         }
 
         internal static string Brackets(string span, string operation, int surroundingPriority)

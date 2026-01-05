@@ -35,6 +35,6 @@ namespace Append.AST
         }
 
         internal override string ToString(int surroundingPriority)
-            => $"{NewValue} -> {Variable.Name}";
+            => $"{Variable.Name} := {NewValue}";
     }
 }

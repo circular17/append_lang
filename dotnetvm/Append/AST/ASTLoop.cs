@@ -3,7 +3,7 @@ using Append.Types;
 
 namespace Append.AST
 {
-    internal class ASTWhile(ASTNode Condition, ASTNode Body) : ASTNode
+    internal class ASTLoop(ASTNode Condition, ASTNode Body) : ASTNode
     {
         internal override TypeId KnownType => TypeId.None;
         internal override TypeId ReturnType => Body.ReturnType;
@@ -64,10 +64,17 @@ namespace Append.AST
 
         internal override string ToString(int surroundingPriority)
         {
-            if (Body is not ASTBlock)
-                return $"{Condition} while {Body.ToString() ?? ""}";
+            string conditionStr;
+            if (Condition is ASTConst c && c.Value.TypeId == TypeId.Bool
+                && c.Value.Data.Bool == true)
+                conditionStr = "";
             else
-                return $"{Condition} while {{{Environment.NewLine}{Formatting.Indent(Body.ToString() ?? "")}"
+                conditionStr = $"{Condition} ";
+
+            if (Body is not ASTBlock)
+                return $"{conditionStr}loop {Body.ToString() ?? ""}";
+            else
+                return $"{conditionStr}loop {{{Environment.NewLine}{Formatting.Indent(Body.ToString() ?? "")}"
                     + $"{Environment.NewLine}}}";
         }
     }

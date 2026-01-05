@@ -1,7 +1,4 @@
-﻿using Append.Parsing;
-using Append.Types;
-
-namespace Append.AST
+﻿namespace Append.AST
 {
     public class ASTFunction : ASTNode
     {
@@ -112,7 +109,31 @@ namespace Append.AST
         {
             if (Body == null)
                 throw new Exceptions.AbstractFunctionException();
-            return (ASTSignal.Jump, Body);
+            if (_locals.Count == 0)
+                return (ASTSignal.Jump, Body);
+            else
+            {
+                switch (step)
+                {
+                    case 0:
+                        foreach (var variable in _locals)
+                        {
+                            context.Value = Value.DefaultFor(variable.TypeId);
+                            context.PushValue();
+                        }
+                        context.EnterFrame(_locals.Count);
+                        step++;
+                        return (ASTSignal.Enter, Body);
+
+                    default:
+#if DEBUG
+                        if (step != 1)
+                            throw new Exceptions.InvalidStepException();
+#endif
+                        context.ExitFrame(_locals.Count);
+                        return (ASTSignal.Done, null);
+                }
+            }
         }
 
         internal bool SameParameterTypes(Types.TypeId[] parameterTypeIds)
@@ -142,18 +163,18 @@ namespace Append.AST
                 header = $"fun {_parameters[0]} '{Name}' {string.Join("; ", _parameters.Skip(1))}";
 
             var locals = _locals.Count == 0 ? ""
-                : Formatting.Indent(string.Join(Environment.NewLine, _locals.Select(l => "var " + l.ToString()))) + Environment.NewLine;
+                : Parsing.Formatting.Indent(string.Join(Environment.NewLine, _locals.Select(l => "var " + l.ToString()))) + Environment.NewLine;
             if (_locals.Count > 0 || Body is ASTBlock)
             {
                 return header + " {" + Environment.NewLine + locals +
-                    Formatting.Indent(Body?.ToString() ?? VoidTypeDef.VoidLitteral) +
+                    Parsing.Formatting.Indent(Body?.ToString() ?? Types.VoidTypeDef.VoidLitteral) +
                     Environment.NewLine + "}";
             }
             else
             {
-                var bodyStr = Body?.ToString() ?? VoidTypeDef.VoidLitteral;
+                var bodyStr = Body?.ToString() ?? Types.VoidTypeDef.VoidLitteral;
                 if (header.Length + 4 + bodyStr.Length > 79)
-                    return header + Environment.NewLine + Formatting.Indent("=> " + bodyStr);
+                    return header + Environment.NewLine + Parsing.Formatting.Indent("=> " + bodyStr);
                 else
                     return header + " => " + bodyStr;
 

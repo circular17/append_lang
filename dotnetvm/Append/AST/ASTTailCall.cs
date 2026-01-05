@@ -54,16 +54,14 @@ namespace Append.AST
 
         internal override string ToString(int surroundingPriority)
         {
-            string name = Operations.IsOperator(_function.Name) ?
-                $"'{_function.Name}'" : _function.Name;
-            var myPriority = Operations.Priorty(Operations.FunctionCall);
+            var myPriority = Operations.Priorty(_function.Name);
             string span;
             if (_parameters.Length == 0)
-                span = $"() {name}";
+                span = $"() {_function.Name}";
             else if (_parameters.Length == 1)
-                span = $"{_parameters[0].ToString(myPriority)} {name}";
+                span = $"{_parameters[0].ToString(myPriority)} {_function.Name}";
             else
-                span = $"{_parameters[0].ToString(myPriority)} {name} " 
+                span = $"{_parameters[0].ToString(myPriority)} {_function.Name} " 
                     + string.Join("; ", _parameters.Skip(1).Select(p => p.ToString(myPriority)));
 
             return Operations.Brackets(

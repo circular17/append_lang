@@ -1,11 +1,12 @@
 ﻿using Append.Types;
-using System.Globalization;
 
 namespace Append.AST
 {
     public class ASTConst(Value Value) : ASTNode
     {
         internal override TypeId KnownType => Value.TypeId;
+
+        public Value Value { get; } = Value;
 
         internal override void ReplaceSubNodes(Func<ASTNode, ASTNode, ASTNode> replaceFunction) { }
         internal override void ReplaceSubNode(ASTNode oldNode, ASTNode newNode) { }

@@ -7,6 +7,7 @@ namespace Append
         protected readonly Scope _globalScope = new("Global", null);
         protected readonly Types.TypeManager _types = new();
         protected readonly Memory.Heap _heap = new();
+        protected ASTNode? _main;
 
         public VMApplication()
         { 
@@ -25,17 +26,38 @@ namespace Append
             return new VMThread(_types, _heap);
         }
 
-        public Value RunProgram(ASTNode program, bool verbose = true)
+        protected void SetMain(ASTNode main)
         {
+            _main = main;
+        }
+
+        public string ProgramToString()
+        {
+            var content = new List<string>();
+            var functions = _globalScope.FunctionsToString();
+            if (!string.IsNullOrWhiteSpace(functions))
+                content.Add(functions);
+
+            if (_main != null)
+                content.Add(_main.ToString());
+
+            return string.Join(Environment.NewLine, content);
+        }
+
+        public Value Run(bool verbose = true)
+        {
+            if (_main == null)
+            {
+                if (verbose)
+                    Console.WriteLine("No main.");
+                return Value.Void;
+            }
             var thread = InitThread();
             var resolver = new FunctionResolver(_globalScope);
-            resolver.ResolveFunctions(ref program);
+            resolver.ResolveFunctions(ref _main);
             if (verbose)
-            {
-                _globalScope.PrintFunctions();
-                Console.WriteLine(program.ToString());
-            }
-            thread.Run(program, false);
+                Console.WriteLine(ProgramToString());
+            thread.Run(_main, false);
             if (verbose)
             {
                 Console.WriteLine("==> " + thread.Value);

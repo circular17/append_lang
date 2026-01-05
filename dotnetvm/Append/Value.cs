@@ -24,9 +24,12 @@ namespace Append
         public static Value FromHandle(Handle Handle, TypeId Type)
             => new(Type, new Data64 { Handle = Handle });
 
+        public static Value DefaultFor(TypeId Type)
+            => new(Type, new Data64 { Int = 0 });
+
         public readonly bool IsReference => TypeManager.IsRefType(TypeId);
 
-        public override string ToString()
+        public override readonly string ToString()
         {
             return TypeId switch
             {
