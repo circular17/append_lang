@@ -7,16 +7,44 @@ namespace Append.Test
     {
         public void DoTest()
         {
-            Value result;
+            TestFactorialFunctionWhileTrueNoReturn();
+            TestFactorialFunctionWhileComparaisonWithReturn();
+            TestFactorialFunctionRecursive();
+            TestFactorialFunctionRecursiveAccumulationTailCall();
+            TestFactorialFunctionRecursiveTailCall();
+            TestFloatToInt();
 
+            Console.WriteLine("TestAST ok");
+        }
+
+        private void TestFactorialFunctionWhileTrueNoReturn()
+        {
             Reset();
-            SetMain(new ASTCall(FactorialFunctionWhileTrueNoReturn(), [new ASTConst(Value.FromInt(6L))]));
-            result = Run();
+            var f = new ASTFunction("factorialNoReturn", _types,
+                parameters: [("N", Types.TypeId.Int)],
+                body: new ASTBlock([
+                    new ASTDefineVar("result", "int") { InitialValue = new ASTConst(Value.FromInt(1L)) },
+                    new ASTLoop(
+                        new ASTConst(Value.FromBool(true)),
+                        new ASTBlock([
+                            new ASTWriteVar("result", new ASTCall("*", [new ASTReadVar("result"), new ASTReadVar("N")])),
+                            new ASTWriteVar("N", new ASTCall("-", [new ASTReadVar("N"), new ASTConst(Value.FromInt(1L))])),
+                            new ASTIf(
+                                new ASTCall("<=", [new ASTReadVar("N"), new ASTConst(Value.FromInt(1L))]),
+                                new ASTBreak())
+                        ])),
+                    new ASTReadVar("result")
+                    ])
+                );
+            SetMain(new ASTBlock([
+                f,
+                new ASTCall(f.Name, [new ASTConst(Value.FromInt(6L))])
+            ]));
+            var result = CompileAndRun();
             Debug.Assert(result.TypeId == Types.TypeId.Int && result.Data.Int == 720);
             Debug.Assert(ProgramToString() ==
-@"fun N int 'factorialNoReturn' {
-  var result int
-  result := 1
+@"func N: int 'factorialNoReturn' {
+  var result: int = 1
   loop {
     result := result * N
     N := N - 1
@@ -24,134 +52,145 @@ namespace Append.Test
   }
   result
 }
-
 6 factorialNoReturn");
-
-            Reset();
-            SetMain(new ASTCall(FactorialFunctionWhileComparaisonWithReturn(), [new ASTConst(Value.FromInt(6L))]));
-            result = Run();
-            Debug.Assert(result.TypeId == Types.TypeId.Int && result.Data.Int == 720);
-
-            Reset();
-            SetMain(new ASTCall(FactorialFunctionRecursive(), [new ASTConst(Value.FromInt(6L))]));
-            result = Run();
-            Debug.Assert(result.TypeId == Types.TypeId.Int && result.Data.Int == 720);
-
-            Reset();
-            SetMain(new ASTCall(FactorialFunctionRecursiveAccumulationTailCall(),
-                [new ASTConst(Value.FromInt(6)), new ASTConst(Value.FromInt(1L))]));
-            result = Run();
-            Debug.Assert(result.TypeId == Types.TypeId.Int && result.Data.Int == 720);
-
-            Reset();
-            SetMain(new ASTCall(FactorialFunctionRecursiveTailCall(), [new ASTConst(Value.FromInt(6L))]));
-            result = Run();
-            Debug.Assert(result.TypeId == Types.TypeId.Int && result.Data.Int == 720);
-
-            Reset();
-            var callNode = new ASTCall(AddOne(), [new ASTConst(Value.FromInt(3L))]);
-            var compNode = new ASTCallByName("<", [callNode, new ASTConst(Value.FromInt(8L))]);
-            SetMain(compNode);
-            result = Run();
-            Debug.Assert(result.TypeId == Types.TypeId.Bool && result.Data.Bool == true);
         }
 
-        private ASTFunction FactorialFunctionWhileTrueNoReturn()
+        private void TestFactorialFunctionWhileComparaisonWithReturn()
         {
-            var f = new ASTFunction("factorialNoReturn", _types, parameters: [("N", Types.TypeId.Int)], locals: [("result", Types.TypeId.Int)]);
-            _globalScope.AddFunction(f);
-            var N = f.FindVariable("N")!;
-            var Result = f.FindVariable("result")!;
-            f.Body =
-                new ASTBlock([
-                    new ASTWriteVar(Result, new ASTConst(Value.FromInt(1L))),
+            Reset();
+            var f = new ASTFunction("factorialWhileComp", _types,
+                parameters: [("N", Types.TypeId.Int)],
+                body: new ASTBlock([
+                    new ASTDefineVar("result", "int"),
+                    new ASTWriteVar("result", new ASTConst(Value.FromInt(1L))),
                     new ASTLoop(
-                        new ASTConst(Value.FromBool(true)),
+                        new ASTCall(">", [new ASTReadVar("N"), new ASTConst(Value.FromInt(1L))]),
                         new ASTBlock([
-                            new ASTWriteVar(Result, new ASTCallByName("*", [new ASTReadLocalVar(Result), new ASTReadLocalVar(N)])),
-                            new ASTWriteVar(N, new ASTCallByName("-", [new ASTReadLocalVar(N), new ASTConst(Value.FromInt(1L))])),
-                            new ASTIf(
-                                new ASTCallByName("<=", [new ASTReadLocalVar(N), new ASTConst(Value.FromInt(1L))]),
-                                new ASTBreak())
+                            new ASTWriteVar("result", new ASTCall("*", [new ASTReadVar("result"), new ASTReadVar("N")])),
+                            new ASTWriteVar("N", new ASTCall("-", [new ASTReadVar("N"), new ASTConst(Value.FromInt(1L))]))
                         ])),
-                    new ASTReadLocalVar(Result)
-                    ]);
-            return f;
-        }
-        
-        private ASTFunction FactorialFunctionWhileComparaisonWithReturn()
-        {
-            var f = new ASTFunction("factorialWhileComp", _types, parameters: [("N", Types.TypeId.Int)], locals: [("result", Types.TypeId.Int)]);
-            _globalScope.AddFunction(f);
-            var N = f.FindVariable("N")!;
-            var Result = f.FindVariable("result")!;
-            f.Body = 
-                new ASTBlock([
-                    new ASTWriteVar(Result, new ASTConst(Value.FromInt(1L))),
-                    new ASTLoop(
-                        new ASTCallByName(">", [new ASTReadLocalVar(N), new ASTConst(Value.FromInt(1L))]),
-                        new ASTBlock([
-                            new ASTWriteVar(Result, new ASTCallByName("*", [new ASTReadLocalVar(Result), new ASTReadLocalVar(N)])),
-                            new ASTWriteVar(N, new ASTCallByName("-", [new ASTReadLocalVar(N), new ASTConst(Value.FromInt(1L))]))
-                        ])),
-                    new ASTReturn(new ASTReadLocalVar(Result))
-                    ]);
-            return f;
+                    new ASTReturn(new ASTReadVar("result"))
+                    ])
+                );
+            SetMain(new ASTBlock([
+                f,
+                new ASTResolvedCall(f, [new ASTConst(Value.FromInt(6L))])
+            ]));
+            var result = CompileAndRun();
+            Debug.Assert(result.TypeId == Types.TypeId.Int && result.Data.Int == 720);
+            Debug.Assert(ProgramToString() ==
+@"func N: int 'factorialWhileComp' {
+  var result: int
+  result := 1
+  N > 1 loop {
+    result := result * N
+    N := N - 1
+  }
+  return result
+}
+6 factorialWhileComp");
         }
 
-        private ASTFunction FactorialFunctionRecursive()
+        private void TestFactorialFunctionRecursive()
         {
-            var f = new ASTFunction("factorialRec", _types, parameters: [("N", Types.TypeId.Int)]);
-            _globalScope.AddFunction(f);
-            var N = f.FindVariable("N")!;
-            f.Body = 
-                new ASTIfElse(
-                new ASTCallByName("<=", [new ASTReadLocalVar(N), new ASTConst(Value.FromInt(1L))]),
-                new ASTConst(Value.FromInt(1L)),
-                new ASTCallByName("*",
-                    [new ASTCallByName(f.Name, [new ASTCallByName("-", [new ASTReadLocalVar(N), new ASTConst(Value.FromInt(1L))])]),
-                    new ASTReadLocalVar(N)]));
-            return f;
+            Reset();
+            var f = new ASTFunction("factorialRec", _types,
+                parameters: [("N", Types.TypeId.Int)],
+                body: new ASTIfElse(
+                    new ASTCall("<=", [new ASTReadVar("N"), new ASTConst(Value.FromInt(1L))]),
+                    new ASTConst(Value.FromInt(1L)),
+                    new ASTCall("*",
+                        [new ASTCall("factorialRec", [new ASTCall("-", [new ASTReadVar("N"), new ASTConst(Value.FromInt(1L))])]),
+                        new ASTReadVar("N")]))
+                );
+            SetMain(
+                new ASTBlock([f, new ASTResolvedCall(f, [new ASTConst(Value.FromInt(6L))])])
+            );
+            var result = CompileAndRun();
+            Debug.Assert(result.TypeId == Types.TypeId.Int && result.Data.Int == 720);
+            Debug.Assert(ProgramToString() ==
+@"func N: int 'factorialRec' => N <= 1 ? 1 else (N - 1) factorialRec * N
+6 factorialRec");
+        }
+
+        private Value TestFactorialFunctionRecursiveAccumulationTailCall()
+        {
+            Value result;
+            Reset();
+            var f = FactorialFunctionRecursiveAccumulationTailCall();
+            SetMain(new ASTMain([
+                f,
+                new ASTResolvedCall(f,
+                [new ASTConst(Value.FromInt(6)), new ASTConst(Value.FromInt(1L))])
+                ]));
+            result = CompileAndRun();
+            Debug.Assert(result.TypeId == Types.TypeId.Int && result.Data.Int == 720);
+            Debug.Assert(ProgramToString() ==
+@"func acc: int 'factorialTail' N: int
+  => N <= 1 ? acc else (N - 1) factorialTail (acc * N)
+6 factorialTail 1");
+            return result;
+        }
+
+        private ASTFunction FactorialFunctionRecursiveAccumulationTailCall()
+            => new("factorialTail", _types,
+                parameters: [("N", Types.TypeId.Int), ("acc", Types.TypeId.Int)],
+                body: new ASTIfElse(
+                    new ASTCall("<=", [new ASTReadVar("N"), new ASTConst(Value.FromInt(1L))]),
+                    new ASTReadVar("acc"),
+                    new ASTCall("factorialTail", [
+                        new ASTCall("-", [new ASTReadVar("N"), new ASTConst(Value.FromInt(1L))]),
+                        new ASTCall("*", [new ASTReadVar("acc"), new ASTReadVar("N")])
+                        ], TailCall: true))
+                );
+
+        private void TestFactorialFunctionRecursiveTailCall()
+        {
+            Reset();
+            var f = FactorialFunctionRecursiveTailCall();
+            SetMain(new ASTMain([
+                f,
+                new ASTResolvedCall(f, [new ASTConst(Value.FromInt(6L))])
+            ]));
+            var result = CompileAndRun();
+            Debug.Assert(result.TypeId == Types.TypeId.Int && result.Data.Int == 720);
         }
 
         private ASTFunction FactorialFunctionRecursiveTailCall()
         {
             var accumulation = FactorialFunctionRecursiveAccumulationTailCall();
-            var f = new ASTFunction("factorialProxy", _types, parameters: [("N", Types.TypeId.Int)]);
-            _globalScope.AddFunction(f);
-            var N = f.FindVariable("N")!;
-            f.Body = new ASTCall(accumulation, [new ASTReadLocalVar(N), new ASTConst(Value.FromInt(1L))]);
-            return f;
+            return new("factorialProxy", _types,
+                parameters: [("N", Types.TypeId.Int)],
+                body: new ASTBlock([
+                    accumulation,
+                    new ASTCall(accumulation.Name, [new ASTReadVar("N"), new ASTConst(Value.FromInt(1L))])
+                    ])
+                );
         }
 
-        private ASTFunction FactorialFunctionRecursiveAccumulationTailCall()
+        private void TestFloatToInt()
         {
-            var f = new ASTFunction("factorialTail", _types, parameters: [("N", Types.TypeId.Int), ("acc", Types.TypeId.Int)]);
-            _globalScope.AddFunction(f);
-            var N = f.FindVariable("N")!;
-            var acc = f.FindVariable("acc")!;
-            f.Body =
-                new ASTIfElse(
-                    new ASTCallByName("<=", [new ASTReadLocalVar(N), new ASTConst(Value.FromInt(1L))]),
-                    new ASTReadLocalVar(acc),
-                    new ASTCallByName(f.Name, [
-                        new ASTCallByName("-", [new ASTReadLocalVar(N), new ASTConst(Value.FromInt(1L))]),
-                        new ASTCallByName("*", [new ASTReadLocalVar(acc), new ASTReadLocalVar(N)])
-                        ], TailCall: true)
-                );
-            return f;
+            Reset();
+            var addOneFunc = AddOne();
+            var callNode = new ASTResolvedCall(addOneFunc, [new ASTConst(Value.FromInt(3L))]);
+            var compNode = new ASTCall("<", [callNode, new ASTConst(Value.FromInt(8L))]);
+            SetMain(new ASTMain([
+                addOneFunc,
+                compNode
+                ]));
+            var result = CompileAndRun();
+            Debug.Assert(result.TypeId == Types.TypeId.Bool && result.Data.Bool == true);
         }
 
         private ASTFunction AddOne()
-        {
-            var f = new ASTFunction("addOne", _types, parameters: [("a", Types.TypeId.Int)]);
-            _globalScope.AddFunction(f);
-            var oneFloatNode = new ASTConst(Value.FromFloat(1.2));
-            var leftNode = new ASTCastFloatToInt(oneFloatNode);
-            var rightNode = new ASTReadLocalVar(f.FindVariable("a")!);
-            var addNode = new ASTCallByName("+", [leftNode, rightNode]);
-            f.Body = new ASTReturn(addNode);
-            return f;
-        }
+            => new("addOne", _types,
+                parameters: [("a", Types.TypeId.Int)],
+                body: new ASTReturn(
+                        new ASTCall(
+                            "+",
+                            [new ASTCastFloatToInt(
+                                new ASTConst(Value.FromFloat(1.2))),
+                            new ASTReadVar("a")]))
+                );
     }
 }

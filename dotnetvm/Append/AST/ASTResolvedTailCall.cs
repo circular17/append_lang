@@ -1,14 +1,16 @@
-﻿using Append.Parsing;
+﻿using Append.AST.Exceptions;
+using Append.Parsing;
 using Append.Types;
 
 namespace Append.AST
 {
-    public class ASTTailCall : ASTNode
+    public class ASTResolvedTailCall : ASTNode
     {
         private readonly ASTFunction _function;
+        public ASTFunction Function => _function;
         private readonly ASTNode[] _parameters;
 
-        public ASTTailCall(ASTFunction Function, ASTNode[] Parameters)
+        public ASTResolvedTailCall(ASTFunction Function, ASTNode[] Parameters)
         {
             _function = Function;
             _parameters = Parameters;
@@ -18,17 +20,20 @@ namespace Append.AST
 
         internal override TypeId KnownType => _function.KnownType;
 
-        internal override void ReplaceSubNodes(Func<ASTNode, ASTNode, ASTNode> replaceFunction)
+        internal override int SubNodeCount => _parameters.Length;
+        internal override ASTNode GetSubNode(int index)
         {
-            for (int i = 0; i < _parameters.Length; i++)
-                _parameters[i] = replaceFunction(this, _parameters[i]);
+            if (index < _parameters.Length)
+                return _parameters[index];
+            else
+                throw new ArgumentOutOfRangeException(nameof(index));
         }
-
-        internal override void ReplaceSubNode(ASTNode oldNode, ASTNode newNode)
+        internal override void SetSubNode(int index, ASTNode node)
         {
-            for (int i = 0; i < _parameters.Length; i++)
-                if (oldNode == _parameters[i])
-                    _parameters[i] = newNode;
+            if (index < _parameters.Length)
+                _parameters[index] = node;
+            else
+                throw new ArgumentOutOfRangeException(nameof(index));
         }
 
         internal override (ASTSignal, ASTNode?) Step(VMThread context, ref int step)

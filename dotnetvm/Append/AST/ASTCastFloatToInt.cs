@@ -7,14 +7,18 @@ namespace Append.AST
     {
         internal override Types.TypeId KnownType => Types.TypeId.Int;
 
-        internal override void ReplaceSubNodes(Func<ASTNode, ASTNode, ASTNode> replaceFunction)
+        internal override int SubNodeCount => 1;
+        internal override ASTNode GetSubNode(int index)
         {
-            SubNode = replaceFunction(this,SubNode);
+            if (index < 0 || index >= SubNodeCount)
+                throw new IndexOutOfRangeException(nameof(index));
+            return SubNode!;
         }
-        internal override void ReplaceSubNode(ASTNode oldNode, ASTNode newNode)
+        internal override void SetSubNode(int index, ASTNode node)
         {
-            if (oldNode == SubNode)
-                SubNode = newNode;
+            if (index < 0 || index >= SubNodeCount)
+                throw new IndexOutOfRangeException(nameof(index));
+            SubNode = node;
         }
 
         internal override (ASTSignal, ASTNode?) Step(VMThread context, ref int step)

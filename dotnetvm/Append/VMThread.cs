@@ -101,7 +101,7 @@
         }
 
         /// <summary>
-        /// Sets a local variable or parameter (index starting from last value)
+        /// Sets a local variable or parameter (negative index to start from last value)
         /// </summary>
         internal void PokeFrame(int index, Value value)
         {
@@ -147,7 +147,7 @@
                         _frameStack.Pop();
                     // update parameters
                     for (int j = parameterCount - 1; j >= 0; j--)
-                        _frameStack.Poke(j, _evaluationStack.Pop());
+                        _frameStack.Poke(-1 - j, _evaluationStack.Pop());
 
                     while (_nodeStack.Count > handler.NodeDepth + 1)
                         _nodeStack.Pop();

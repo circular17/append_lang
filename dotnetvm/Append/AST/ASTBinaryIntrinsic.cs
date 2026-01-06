@@ -7,19 +7,33 @@ namespace Append.AST
         internal override Types.TypeId KnownType => Operation.ResultType;
         public BinaryIntrinsic Operation { get; } = Operation;
 
-        internal override void ReplaceSubNodes(Func<ASTNode, ASTNode, ASTNode> replaceFunction)
+        internal override int SubNodeCount => 2;
+        internal override ASTNode GetSubNode(int index)
         {
-            LeftNode = replaceFunction(this, LeftNode);
-            RightNode = replaceFunction(this, RightNode);
+            return index switch
+            {
+                0 => LeftNode,
+                1 => RightNode,
+                _ => throw new IndexOutOfRangeException(nameof(index))
+            };
         }
-        internal override void ReplaceSubNode(ASTNode oldNode, ASTNode newNode)
+        internal override void SetSubNode(int index, ASTNode node)
         {
-            if (oldNode == LeftNode)
-                LeftNode = newNode;
-            else if (oldNode == RightNode)
-                RightNode = newNode;
+            switch (index)
+            {
+                case 0:
+                    LeftNode = node;
+                    break;
+
+                case 1:
+                    RightNode = node;
+                    break;
+
+                default:
+                    throw new IndexOutOfRangeException(nameof(index));
+            };
         }
-            
+
         internal override (ASTSignal, ASTNode?) Step(VMThread context, ref int step)
         {
             switch (step)

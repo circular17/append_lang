@@ -25,12 +25,13 @@ namespace Append.Types
 
             foreach (var intrinsic in BinaryIntrinsic.BinaryIntrinsics)
             {
-                var f = new ASTFunction(intrinsic.Name, typeManager,
-                    parameters: [("a", intrinsic.LeftType), ("b", intrinsic.RightType)]);
-                f.Body = new ASTBinaryIntrinsic(new ASTReadLocalVar(f.FindVariable("a")!),
-                    new ASTReadLocalVar(f.FindVariable("b")!), intrinsic);
-                f.IsIntrinsic = true;
-                scope.AddFunction(f);
+                scope.AddFunction(new ASTFunction(intrinsic.Name, typeManager,
+                    parameters: [("a", intrinsic.LeftType), ("b", intrinsic.RightType)])
+                {
+                    Body = new ASTBinaryIntrinsic(new ASTReadVar("a"),
+                        new ASTReadVar("b"), intrinsic),
+                    IsIntrinsic = true
+                });
             }
         }
 

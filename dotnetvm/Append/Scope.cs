@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using System.Text;
+using System.Xml.Linq;
 
 namespace Append
 {
@@ -18,6 +19,11 @@ namespace Append
         private readonly Dictionary<string, DualType> _types = [];
 
         private readonly Dictionary<string, List<AST.ASTFunction>> _functions = [];
+
+        public IEnumerable<AST.ASTFunction> AllFunctions
+            => _functions.Values.SelectMany(list => list);
+
+        private readonly Dictionary<string, AST.Variable> _variables = [];
 
         public void AddType(Types.TypeId typeId, Types.TypeDef typeDef)
         {
@@ -52,6 +58,11 @@ namespace Append
             list.Add(function);
         }
 
+        public void AddVariable(AST.Variable Variable)
+        {
+            _variables.Add(Variable.Name, Variable);
+        }
+
         public bool TryFindType(string name, out (Types.TypeId ValueTypeId, Types.TypeId RefTypeId) type)
         {
             if (_types.TryGetValue(name, out var dualType))
@@ -59,7 +70,8 @@ namespace Append
                 type = dualType.ToTuple();
                 return true;
             }
-            else
+            else if (Parent != null)
+                return Parent.TryFindType(name, out type);
             {
                 type = (Types.TypeId.None, Types.TypeId.None);
                 return false;
@@ -80,8 +92,23 @@ namespace Append
                     }
                 }
             }
+            if (Parent != null)
+                return Parent.TryFindFunction(functionName, knownParameterTypes, out function);
             function = null;
             return false;
+        }
+
+        public bool TryFindVariable(string variableName, [NotNullWhen(true)]out AST.Variable? variable)
+        {
+            if (!_variables.TryGetValue(variableName, out variable))
+            {
+                if (Parent != null)
+                    return Parent.TryFindVariable(variableName, out variable);
+                else
+                    return false;
+            }
+            else
+                return true;
         }
 
         internal void Clear()

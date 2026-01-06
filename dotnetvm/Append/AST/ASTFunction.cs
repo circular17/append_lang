@@ -1,11 +1,14 @@
-﻿namespace Append.AST
+﻿using Append.Types;
+
+namespace Append.AST
 {
-    public class ASTFunction : ASTNode
+    public class ASTFunction : ASTVarContainer
     {
         public string Name { get; }
-        private readonly List<ASTLocalVar> _parameters = [];
-        private readonly List<ASTLocalVar> _locals = [];
-        private readonly Dictionary<string, ASTLocalVar> _varByName = [];
+
+        private readonly List<Variable> _parameters = [];
+        private readonly List<Variable> _locals = [];
+        private readonly Dictionary<string, Variable> _varByName = [];
 
         private ASTNode? _body;
         public ASTNode? Body
@@ -23,33 +26,44 @@
         }
         public bool IsIntrinsic { get; set; }
 
-        public ASTFunction(string name, Types.TypeManager typeManager,
-            (string Name, Types.TypeId Type)[]? parameters = null, 
-            (string Name, Types.TypeId Type)[]? locals = null)
+        public ASTFunction(string name, TypeManager typeManager,
+            (string Name, TypeId TypeId)[]? parameters = null,
+            ASTNode? body = null)
         {
             Name = name;
-            var reverseStackIndex = 0;
-            if (locals != null)
-                foreach (var local in locals.Reverse())
-                {
-                    if (_varByName.ContainsKey(local.Name))
-                        throw new Exceptions.DuplicateVariableNameException();
-                    var astVar = new ASTLocalVar(local.Name, local.Type, typeManager, reverseStackIndex);
-                    _locals.Add(astVar);
-                    reverseStackIndex++;
-                    _varByName.Add(local.Name, astVar);
-                }
-
+            Body = body;
             if (parameters != null)
-                foreach (var param in parameters)
-                {
-                    if (_varByName.ContainsKey(param.Name))
-                        throw new Exceptions.DuplicateVariableNameException();
-                    var astVar = new ASTLocalVar(param.Name, param.Type, typeManager, reverseStackIndex);
-                    _parameters.Add(astVar);
-                    reverseStackIndex++;
-                    _varByName.Add(param.Name, astVar);
-                }
+                foreach (var param in parameters.Reverse())
+                    AddParameterVariable(param.Name, param.TypeId, typeManager);
+        }
+
+        public void AddParameterVariable(string name, TypeId typeId, TypeManager typeManager)
+        {
+            var variable = AddVariable(name, typeId, typeManager);
+            _parameters.Add(variable);
+        }
+
+        public override Variable AddLocalVariable(string name, TypeId type, TypeManager typeManager)
+        {
+            var variable = AddVariable(name, type, typeManager);
+            _locals.Add(variable);
+            return variable;
+        }
+
+        private Variable AddVariable(string name, TypeId type, TypeManager typeManager)
+        {
+            if (_varByName.ContainsKey(name))
+                throw new Exceptions.DuplicateVariableNameException();
+
+            foreach (var existingVariable in _varByName.Values)
+                existingVariable.StackIndex--;
+
+            var newVariable = new Variable(name, type, typeManager)
+            {
+                StackIndex = -1
+            };
+            _varByName.Add(name, newVariable);
+            return newVariable;
         }
 
         private static void DetectReturningNodes(ASTNode root, bool setFlag)
@@ -68,18 +82,21 @@
         }
 
         public int ParameterCount => _parameters.Count;
-        public Types.TypeId[] KnownParameterTypes =>
+        public Variable GetParameter(int index)
+            => _parameters[index];
+
+        public TypeId[] KnownParameterTypes =>
             [.. from p in _parameters select p.TypeId];
 
-        private Types.TypeId _knownType = Types.TypeId.None;
-        internal override Types.TypeId KnownType
+        private TypeId _knownType = TypeId.None;
+        internal override TypeId KnownType
         {
             get
             {
-                if (_knownType == Types.TypeId.None && Body != null)
+                if (_knownType == TypeId.None && Body != null)
                 {
                     _knownType = Body.ReturnType;
-                    if (_knownType == Types.TypeId.None)
+                    if (_knownType == TypeId.None)
                     {
                         _knownType = Body.KnownType;
                     }
@@ -88,21 +105,18 @@
             }
         } 
 
-        public ASTLocalVar? FindVariable(string name)
+        internal override int SubNodeCount => Body == null ? 0 : 1;
+        internal override ASTNode GetSubNode(int index)
         {
-            _varByName.TryGetValue(name, out var result);
-            return result;
+            if (index < 0 || index >= SubNodeCount)
+                throw new IndexOutOfRangeException(nameof(index));
+            return Body!;
         }
-
-        internal override void ReplaceSubNodes(Func<ASTNode, ASTNode, ASTNode> replaceFunction)
+        internal override void SetSubNode(int index, ASTNode node)
         {
-            if (Body != null) 
-                Body = replaceFunction(this, Body);
-        }
-        internal override void ReplaceSubNode(ASTNode oldNode, ASTNode newNode)
-        {
-            if (Body == oldNode)
-                Body = newNode;
+            if (index < 0 || index >= SubNodeCount)
+                throw new IndexOutOfRangeException(nameof(index));
+            Body = node;
         }
 
         internal override (ASTSignal, ASTNode?) Step(VMThread context, ref int step)
@@ -136,14 +150,14 @@
             }
         }
 
-        internal bool SameParameterTypes(Types.TypeId[] parameterTypeIds)
+        internal bool SameParameterTypes(TypeId[] parameterTypeIds)
         {
             if (parameterTypeIds.Length != ParameterCount)
                 return false;
             for (int i = 0; i < ParameterCount; i++)
             {
                 if (parameterTypeIds[i] != _parameters[i].TypeId
-                    || _parameters[i].TypeId == Types.TypeId.None)
+                    || _parameters[i].TypeId == TypeId.None)
                     return false;
             }
             return true;
@@ -156,23 +170,21 @@
         {
             string header;
             if (_parameters.Count == 0)
-                header = $"fun () '{Name}'";
+                header = $"func () '{Name}'";
             else if (_parameters.Count == 1)
-                header = $"fun {_parameters[0]} '{Name}'";
+                header = $"func {_parameters[0]} '{Name}'";
             else
-                header = $"fun {_parameters[0]} '{Name}' {string.Join("; ", _parameters.Skip(1))}";
+                header = $"func {_parameters[0]} '{Name}' {string.Join("; ", _parameters.Skip(1))}";
 
-            var locals = _locals.Count == 0 ? ""
-                : Parsing.Formatting.Indent(string.Join(Environment.NewLine, _locals.Select(l => "var " + l.ToString()))) + Environment.NewLine;
-            if (_locals.Count > 0 || Body is ASTBlock)
+            if (Body is ASTBlock)
             {
-                return header + " {" + Environment.NewLine + locals +
-                    Parsing.Formatting.Indent(Body?.ToString() ?? Types.VoidTypeDef.VoidLitteral) +
+                return header + " {" + Environment.NewLine + 
+                    Parsing.Formatting.Indent(Body?.ToString() ?? VoidTypeDef.VoidLitteral) +
                     Environment.NewLine + "}";
             }
             else
             {
-                var bodyStr = Body?.ToString() ?? Types.VoidTypeDef.VoidLitteral;
+                var bodyStr = Body?.ToString() ?? VoidTypeDef.VoidLitteral;
                 if (header.Length + 4 + bodyStr.Length > 79)
                     return header + Environment.NewLine + Parsing.Formatting.Indent("=> " + bodyStr);
                 else

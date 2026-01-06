@@ -2,24 +2,26 @@
 
 namespace Append
 {
-    public class FunctionResolver(Scope Scope)
+    public class FunctionResolver(Scope GlobalScope)
     {
-        internal List<(ASTNode? Parent, ASTCallByName Call)> UnresolvedCalls { get; } = [];
-        internal List<(ASTNode? Parent, ASTCallByName Call)> ResolvedCalls { get; } = [];
+        internal List<(ASTNode? Parent, ASTCall Call)> UnresolvedCalls { get; } = [];
+        internal List<(ASTNode? Parent, ASTCall Call)> ResolvedCalls { get; } = [];
         internal HashSet<ASTNode> VisitedNodes { get; } = [];
 
         private readonly Stack<ASTFunction> _functionStack = [];
+        private readonly HashSet<ASTFunction> _addedFunctions = [];
 
-        public void ResolveFunctions(ref ASTNode root, bool verbose = false)
+        public void ResolveFunctions(ASTMain root, bool verbose = false)
         {
             _functionStack.Clear();
+            _addedFunctions.Clear();
             var doing = true;
             while (doing)
             {
                 int resolvedCount = ResolvedCalls.Count;
                 VisitedNodes.Clear();
                 UnresolvedCalls.Clear();
-                root = InternalResolveFunctions(null, root);
+                _ = InternalResolveFunctions(null, GlobalScope, root);
                 doing = resolvedCount < ResolvedCalls.Count;
             }
 
@@ -47,7 +49,7 @@ namespace Append
             }
         }
 
-        public ASTNode InternalResolveFunctions(ASTNode? parent, ASTNode node)
+        public ASTNode InternalResolveFunctions(ASTNode? parent, Scope scope, ASTNode node)
         {
             if (VisitedNodes.Contains(node))
                 return node;
@@ -55,16 +57,31 @@ namespace Append
             VisitedNodes.Add(node);
 
             bool inFunction = false;
+
+            if (node is ASTFunction g && !_addedFunctions.Contains(g))
+            {
+                scope.AddFunction(g);
+                _addedFunctions.Add(g);
+            }
+
             if (parent is ASTFunction f)
             {
                 _functionStack.Push(f);
                 inFunction = true;
+                if (f.Scope != null)
+                    scope = f.Scope;
             }
 
-            node.ReplaceSubNodes(InternalResolveFunctions);
-            if (node is ASTCallByName call)
+            for (int i = 0; i < node.SubNodeCount; i++)
             {
-                if (Scope.TryFindFunction(call.FunctionName, call.KnownParameterTypes, out var function))
+                var prevNode = node.GetSubNode(i);
+                var newNode = InternalResolveFunctions(node, scope, prevNode);
+                if (newNode != prevNode)
+                    node.SetSubNode(i, newNode);
+            }
+            if (node is ASTCall call)
+            {
+                if (scope.TryFindFunction(call.FunctionName, call.KnownParameterTypes, out var function))
                 {
                     ResolvedCalls.Add((parent, call));
                     bool isReturning = node.IsReturning;
@@ -75,9 +92,9 @@ namespace Append
                     else
                     {
                         if (_functionStack.Count > 0 && _functionStack.Peek() == function && node.IsReturning)
-                            node = new ASTTailCall(function, call.Parameters);
+                            node = new ASTResolvedTailCall(function, call.Parameters);
                         else
-                            node = new ASTCall(function, call.Parameters);
+                            node = new ASTResolvedCall(function, call.Parameters);
                     }
 
                     node.IsReturning = isReturning;

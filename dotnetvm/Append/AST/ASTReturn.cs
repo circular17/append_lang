@@ -16,14 +16,18 @@ namespace Append.AST
         internal override TypeId KnownType => TypeId.None;
         internal override TypeId ReturnType => _result.KnownType;
 
-        internal override void ReplaceSubNodes(Func<ASTNode, ASTNode, ASTNode> replaceFunction)
+        internal override int SubNodeCount => 1;
+        internal override ASTNode GetSubNode(int index)
         {
-            _result = replaceFunction(this, _result);
+            if (index < 0 || index >= SubNodeCount)
+                throw new IndexOutOfRangeException(nameof(index));
+            return Result;
         }
-        internal override void ReplaceSubNode(ASTNode oldNode, ASTNode newNode)
+        internal override void SetSubNode(int index, ASTNode node)
         {
-            if (oldNode == _result)
-                _result = oldNode;
+            if (index < 0 || index >= SubNodeCount)
+                throw new IndexOutOfRangeException(nameof(index));
+            _result = node;
         }
 
         internal override (ASTSignal, ASTNode?) Step(VMThread context, ref int step)

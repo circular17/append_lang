@@ -20,10 +20,20 @@
         }
 
         public Value Peek(int index)
-            => _stack[_stack.Count - 1 - index];
+        {
+            if (index < 0)
+                return _stack[^(-index)];
+            else
+                return _stack[index];
+        }
 
-        public Value Poke(int index, Value value)
-            => _stack[_stack.Count - 1 - index] = value;
+        public void Poke(int index, Value value)
+        {
+            if (index < 0)
+              _stack[^(-index)] = value;
+            else
+              _stack[index] = value;
+        }
 
         public void EnterFrame(GenericStack source, int frameSize)
         {

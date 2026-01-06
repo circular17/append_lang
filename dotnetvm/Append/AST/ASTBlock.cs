@@ -19,16 +19,14 @@ namespace Append.AST
 
         public ASTNode[] Instructions { get; } = Instructions;
 
-        internal override void ReplaceSubNodes(Func<ASTNode, ASTNode, ASTNode> replaceFunction)
+        internal override int SubNodeCount => Instructions.Length;
+        internal override ASTNode GetSubNode(int index)
         {
-            for (int i = 0; i < Instructions.Length; i++)
-                Instructions[i] = replaceFunction(this, Instructions[i]);
+            return Instructions[index];
         }
-        internal override void ReplaceSubNode(ASTNode oldNode, ASTNode newNode)
+        internal override void SetSubNode(int index, ASTNode node)
         {
-            for (int i = 0; i < Instructions.Length; i++)
-                if (oldNode == Instructions[i])
-                    Instructions[i] = oldNode;
+            Instructions[index] = node;
         }
 
         internal override (ASTSignal, ASTNode?) Step(VMThread context, ref int step)
@@ -37,7 +35,10 @@ namespace Append.AST
             {
                 var nextNode = Instructions[step];
                 step++;
-                return (ASTSignal.Enter, nextNode);
+                if (nextNode is ASTFunction)
+                    return (ASTSignal.Continue, null);
+                else
+                    return (ASTSignal.Enter, nextNode);
             }
             else
             {

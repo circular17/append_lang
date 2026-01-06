@@ -7,7 +7,7 @@ namespace Append
         protected readonly Scope _globalScope = new("Global", null);
         protected readonly Types.TypeManager _types = new();
         protected readonly Memory.Heap _heap = new();
-        protected ASTNode? _main;
+        protected ASTMain? _main;
 
         public VMApplication()
         { 
@@ -28,23 +28,37 @@ namespace Append
 
         protected void SetMain(ASTNode main)
         {
-            _main = main;
+            if (main is ASTMain container)
+                _main = container;
+            else
+                _main = new ASTMain([main]);
         }
 
         public string ProgramToString()
         {
-            var content = new List<string>();
-            var functions = _globalScope.FunctionsToString();
-            if (!string.IsNullOrWhiteSpace(functions))
-                content.Add(functions);
-
-            if (_main != null)
-                content.Add(_main.ToString());
-
-            return string.Join(Environment.NewLine, content);
+            return _main?.ToString() ?? "";
         }
 
-        public Value Run(bool verbose = true)
+        public Value CompileAndRun(bool verbose = false)
+        {
+            if (_main == null)
+            {
+                if (verbose)
+                    Console.WriteLine("No main.");
+                return Value.Void;
+            }
+            var varResolver = new VariableResolver(_globalScope);
+            varResolver.ResolveVariables(_main, _types);
+            foreach (var f in _globalScope.AllFunctions)
+                varResolver.ResolveVariables(f, _types);
+            var funcResolver = new FunctionResolver(_globalScope);
+            funcResolver.ResolveFunctions(_main);
+            if (verbose)
+                Console.WriteLine(ProgramToString());
+            return Run(verbose);
+        }
+
+        private Value Run(bool verbose = false)
         {
             if (_main == null)
             {
@@ -53,11 +67,7 @@ namespace Append
                 return Value.Void;
             }
             var thread = InitThread();
-            var resolver = new FunctionResolver(_globalScope);
-            resolver.ResolveFunctions(ref _main);
-            if (verbose)
-                Console.WriteLine(ProgramToString());
-            thread.Run(_main, false);
+            thread.Run(_main, verbose);
             if (verbose)
             {
                 Console.WriteLine("==> " + thread.Value);

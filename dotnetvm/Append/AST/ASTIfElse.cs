@@ -36,20 +36,36 @@ namespace Append.AST
             }
         }
 
-        internal override void ReplaceSubNodes(Func<ASTNode, ASTNode, ASTNode> replaceFunction)
+        internal override int SubNodeCount => 3;
+        internal override ASTNode GetSubNode(int index)
         {
-            Condition = replaceFunction(this, Condition);
-            YesBody = replaceFunction(this, YesBody);
-            NoBody = replaceFunction(this, NoBody);
+            return index switch
+            {
+                0 => Condition,
+                1 => YesBody,
+                2 => NoBody,
+                _ => throw new IndexOutOfRangeException(nameof(index)),
+            };
         }
-        internal override void ReplaceSubNode(ASTNode oldNode, ASTNode newNode)
+        internal override void SetSubNode(int index, ASTNode node)
         {
-            if (oldNode == Condition)
-                Condition = newNode;
-            else if (oldNode == YesBody)
-                YesBody = newNode;
-            else if (oldNode == NoBody)
-                NoBody = newNode;
+            switch (index)
+            {
+                case 0:
+                    Condition = node;
+                    break;
+
+                case 1:
+                    YesBody = node;
+                    break;
+
+                case 2:
+                    NoBody = node;
+                    break;
+
+                default:
+                    throw new IndexOutOfRangeException(nameof(index));
+            }
         }
 
         internal override (ASTSignal, ASTNode?) Step(VMThread context, ref int step)

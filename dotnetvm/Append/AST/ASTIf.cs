@@ -8,17 +8,21 @@ namespace Append.AST
         internal override TypeId KnownType => TypeId.None;
         internal override TypeId ReturnType => YesBody.ReturnType;
 
-        internal override void ReplaceSubNodes(Func<ASTNode, ASTNode, ASTNode> replaceFunction)
+        internal override int SubNodeCount => 2;
+        internal override ASTNode GetSubNode(int index)
         {
-            Condition = replaceFunction(this, Condition);
-            YesBody = replaceFunction(this, YesBody);
+            if (index < 0 || index >= SubNodeCount)
+                throw new IndexOutOfRangeException(nameof(index));
+            return index == 0 ? Condition : YesBody;
         }
-        internal override void ReplaceSubNode(ASTNode oldNode, ASTNode newNode)
+        internal override void SetSubNode(int index, ASTNode node)
         {
-            if (oldNode == Condition)
-                Condition = newNode;
-            else if (oldNode == YesBody)
-                YesBody = newNode;
+            if (index < 0 || index >= SubNodeCount)
+                throw new IndexOutOfRangeException(nameof(index));
+            if (index == 0)
+                Condition = node;
+            else
+                YesBody = node;
         }
 
         internal override (ASTSignal, ASTNode?) Step(VMThread context, ref int step)

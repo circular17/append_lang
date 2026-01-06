@@ -7,8 +7,9 @@ namespace Append.AST
         internal virtual Types.TypeId ReturnType { get; } = Types.TypeId.None;
         public bool IsReturning { get; set; }
 
-        internal abstract void ReplaceSubNodes(Func<ASTNode, ASTNode, ASTNode> replaceFunction);
-        internal abstract void ReplaceSubNode(ASTNode oldNode, ASTNode newNode);
+        internal abstract int SubNodeCount { get; }
+        internal abstract ASTNode GetSubNode(int index);
+        internal abstract void SetSubNode(int index, ASTNode node);
 
         internal abstract (ASTSignal, ASTNode?) Step(VMThread context, ref int step);
 
