@@ -2,16 +2,17 @@
 
 namespace Append.AST
 {
-    internal class ASTDefineVar(string Name, string TypeName) : ASTNode
+    internal class ASTDefineVar(string Name, string TypeName, ASTNode? InitialValue = null) : ASTNode
     {
         public string Name { get; } = Name;
         public string TypeName { get; } = TypeName;
-        public ASTNode? InitialValue { get; set; }
+        public ASTNode? InitialValue { get; set; } = InitialValue;
         internal Variable? Variable { get; set; }
 
         internal override TypeId KnownType => TypeId.None; // a variable definition doesn't yield a value
 
         internal override int SubNodeCount => InitialValue == null ? 0 : 1;
+
         internal override ASTNode GetSubNode(int index)
         {
             if (index < 0 || index >= SubNodeCount)

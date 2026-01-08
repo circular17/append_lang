@@ -13,6 +13,7 @@ namespace Append.Test
             TestFactorialFunctionRecursiveAccumulationTailCall();
             TestFactorialFunctionRecursiveTailCall();
             TestFloatToInt();
+            TestGlobalVar();
 
             Console.WriteLine("TestAST ok");
         }
@@ -23,7 +24,7 @@ namespace Append.Test
             var f = new ASTFunction("factorialNoReturn", _types,
                 parameters: [("N", Types.TypeId.Int)],
                 body: new ASTBlock([
-                    new ASTDefineVar("result", "int") { InitialValue = new ASTConst(Value.FromInt(1L)) },
+                    new ASTDefineVar("result", "int", InitialValue: new ASTConst(Value.FromInt(1L))),
                     new ASTLoop(
                         new ASTConst(Value.FromBool(true)),
                         new ASTBlock([
@@ -192,5 +193,21 @@ namespace Append.Test
                                 new ASTConst(Value.FromFloat(1.2))),
                             new ASTReadVar("a")]))
                 );
+
+        private void TestGlobalVar()
+        {
+            Reset();
+            SetMain(new ASTBlock([
+                new ASTDefineVar("a", "int"),
+                new ASTFunction(
+                    "f", _types,
+                    body: new ASTWriteVar("a", new ASTConst(Value.FromInt(42)))
+                ),
+                new ASTCall("f", []),
+                new ASTReadVar("a")
+            ]));
+            var result = CompileAndRun();
+            Debug.Assert(result.TypeId == Types.TypeId.Int && result.Data.Int == 42);
+        }
     }
 }
