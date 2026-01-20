@@ -16,14 +16,13 @@
         public const string Coalescing = "??";
         public const string Comparison = "< <= = != >= >";
         public const string BitAnd = "&";
-        public const string BitXor = "xor";
-        public const string BitOr = "or";
+        public const string BitXorOr = "xor or";
         public const string BitNegationWeak = "not";
         public const string Ternary = "? else";
-        public const string Lambda = "=>";
-        public const string Piping = "->";
-        public const string Assignment = ":=";
+        public const string Lambda = "\\";
         public const string Case = "|";
+        public const string Piping = "->";
+        public const string Assignment = ":= += -= *= /= %= ^= &= ++=";
 
         public static bool IsOperatorChar(char c)
         {
@@ -39,12 +38,12 @@
             if (IsOperatorChar(name[0]))
                 return true;
 
-            return name == BitXor || name == BitOr || name == BitNegationWeak
+            return name == "xor" || name == "or" || name == BitNegationWeak
                 || name == Mutation || name == "else";
         }
 
         public static string[] AllOperations =
-        {
+        [
             Indexing,
             Mutation,
             Exponentiation,
@@ -59,15 +58,14 @@
             Coalescing,
             Comparison,
             BitAnd,
-            BitXor,
-            BitOr,
+            BitXorOr,
             BitNegationWeak,
             Ternary,
             Lambda,
+            Case,
             Piping,
             Assignment,
-            Case
-        };
+        ];
 
         private static readonly int _functionCallPriority = 
             AllOperations.Length - Array.IndexOf(AllOperations, FunctionCall);

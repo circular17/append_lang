@@ -25,7 +25,20 @@ namespace Append
                 {
                     f.Scope = new Scope("func " + f.Name, parentScope);
                     for (int i = 0; i < f.ParameterCount; i++)
-                        f.Scope.AddVariable(f.GetParameter(i));
+                    {
+                        var parameter = f.GetParameter(i);
+                        if (parameter.TypeId == TypeId.None)
+                        {
+                            if (parentScope.TryFindType(parameter.TypeName, out var found))
+                            {
+                                // prefer value type
+                                parameter.TypeId =
+                                    found.ValueTypeId != TypeId.None ?
+                                    found.ValueTypeId : found.RefTypeId;
+                            }
+                        }
+                        f.Scope.AddVariable(parameter);
+                    }
                 }
                 else if (f.Scope.Parent != parentScope)
                     throw new UnexpectedParentScopeException();
@@ -35,17 +48,20 @@ namespace Append
             }
             else
             {
-                if (root is ASTDefineVar def && def.Variable == null)
+                if (root is ASTDefineVar def)
                 {
-                    if (parentScope.TryFindType(def.TypeName, out var found))
+                    def.Variable ??= varContainer.AddLocalVariable(def.Name, def.TypeName);
+                    if (def.Variable.TypeId == TypeId.None)
                     {
-                        // prefer value type
-                        TypeId typeId =
-                            found.ValueTypeId != TypeId.None ?
-                            found.ValueTypeId : found.RefTypeId;
-                        def.Variable = varContainer.AddLocalVariable(def.Name, typeId, typeManager);
-                        parentScope.AddVariable(def.Variable);                   
+                        if (parentScope.TryFindType(def.TypeName, out var found))
+                        {
+                            // prefer value type
+                            def.Variable.TypeId =
+                                found.ValueTypeId != TypeId.None ?
+                                found.ValueTypeId : found.RefTypeId;
+                        }
                     }
+                    parentScope.AddVariable(def.Variable);
                 }
                 else if (root is ASTWriteVar write)
                 {

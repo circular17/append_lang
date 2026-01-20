@@ -10,19 +10,19 @@ namespace Append.AST
         private readonly List<Variable> _locals = [];
         private readonly Dictionary<string, Variable> _varByName = [];
 
-        public override Variable AddLocalVariable(string name, TypeId type, TypeManager typeManager)
+        public override Variable AddLocalVariable(string name, string typeName)
         {
-            var variable = AddVariable(name, type, typeManager);
+            var variable = AddVariable(name, typeName);
             _locals.Add(variable);
             return variable;
         }
 
-        private Variable AddVariable(string name, TypeId type, TypeManager typeManager)
+        private Variable AddVariable(string name, string typeName)
         {
             if (_varByName.ContainsKey(name))
                 throw new Exceptions.DuplicateVariableNameException();
 
-            var newVariable = new Variable(name, type, typeManager)
+            var newVariable = new Variable(name, typeName)
             {
                 StackIndex = _varByName.Count
             };

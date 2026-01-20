@@ -6,6 +6,6 @@ namespace Append.AST
     {
         public Scope? Scope { get; set; }
 
-        public abstract Variable AddLocalVariable(string name, TypeId type, TypeManager typeManager);
+        public abstract Variable AddLocalVariable(string name, string typeName);
     }
 }

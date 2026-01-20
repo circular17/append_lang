@@ -26,31 +26,31 @@ namespace Append.AST
         }
         public bool IsIntrinsic { get; set; }
 
-        public ASTFunction(string name, TypeManager typeManager,
-            (string Name, TypeId TypeId)[]? parameters = null,
+        public ASTFunction(string name, 
+            (string Name, string TypeName)[]? parameters = null,
             ASTNode? body = null)
         {
             Name = name;
             Body = body;
             if (parameters != null)
                 foreach (var param in parameters.Reverse())
-                    AddParameterVariable(param.Name, param.TypeId, typeManager);
+                    AddParameterVariable(param.Name, param.TypeName);
         }
 
-        public void AddParameterVariable(string name, TypeId typeId, TypeManager typeManager)
+        public void AddParameterVariable(string name, string typeName)
         {
-            var variable = AddVariable(name, typeId, typeManager);
+            var variable = AddVariable(name, typeName);
             _parameters.Add(variable);
         }
 
-        public override Variable AddLocalVariable(string name, TypeId type, TypeManager typeManager)
+        public override Variable AddLocalVariable(string name, string typeName)
         {
-            var variable = AddVariable(name, type, typeManager);
+            var variable = AddVariable(name, typeName);
             _locals.Add(variable);
             return variable;
         }
 
-        private Variable AddVariable(string name, TypeId type, TypeManager typeManager)
+        private Variable AddVariable(string name, string typeName)
         {
             if (_varByName.ContainsKey(name))
                 throw new Exceptions.DuplicateVariableNameException();
@@ -58,7 +58,7 @@ namespace Append.AST
             foreach (var existingVariable in _varByName.Values)
                 existingVariable.StackIndex--;
 
-            var newVariable = new Variable(name, type, typeManager)
+            var newVariable = new Variable(name, typeName)
             {
                 StackIndex = -1
             };
@@ -170,7 +170,7 @@ namespace Append.AST
         {
             string header;
             if (_parameters.Count == 0)
-                header = $"func () '{Name}'";
+                header = $"func '{Name}'";
             else if (_parameters.Count == 1)
                 header = $"func {_parameters[0]} '{Name}'";
             else

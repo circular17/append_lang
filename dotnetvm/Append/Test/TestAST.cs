@@ -1,4 +1,5 @@
 ﻿using Append.AST;
+using Append.Parsing;
 using System.Diagnostics;
 
 namespace Append.Test
@@ -21,8 +22,8 @@ namespace Append.Test
         private void TestFactorialFunctionWhileTrueNoReturn()
         {
             Reset();
-            var f = new ASTFunction("factorialNoReturn", _types,
-                parameters: [("N", Types.TypeId.Int)],
+            var f = new ASTFunction("factorialNoReturn",
+                parameters: [("N", "int")],
                 body: new ASTBlock([
                     new ASTDefineVar("result", "int", InitialValue: new ASTConst(Value.FromInt(1L))),
                     new ASTLoop(
@@ -41,7 +42,7 @@ namespace Append.Test
                 f,
                 new ASTCall(f.Name, [new ASTConst(Value.FromInt(6L))])
             ]));
-            var result = CompileAndRun();
+            var result = ParseCompileAndRun();
             Debug.Assert(result.TypeId == Types.TypeId.Int && result.Data.Int == 720);
             Debug.Assert(ProgramToString() ==
 @"func N: int 'factorialNoReturn' {
@@ -56,11 +57,18 @@ namespace Append.Test
 6 factorialNoReturn");
         }
 
+        private Value ParseCompileAndRun()
+        {
+            var p = new Parser(ProgramToString());
+            p.Parse();
+            return CompileAndRun();
+        }
+
         private void TestFactorialFunctionWhileComparaisonWithReturn()
         {
             Reset();
-            var f = new ASTFunction("factorialWhileComp", _types,
-                parameters: [("N", Types.TypeId.Int)],
+            var f = new ASTFunction("factorialWhileComp",
+                parameters: [("N", "int")],
                 body: new ASTBlock([
                     new ASTDefineVar("result", "int"),
                     new ASTWriteVar("result", new ASTConst(Value.FromInt(1L))),
@@ -77,7 +85,7 @@ namespace Append.Test
                 f,
                 new ASTResolvedCall(f, [new ASTConst(Value.FromInt(6L))])
             ]));
-            var result = CompileAndRun();
+            var result = ParseCompileAndRun();
             Debug.Assert(result.TypeId == Types.TypeId.Int && result.Data.Int == 720);
             Debug.Assert(ProgramToString() ==
 @"func N: int 'factorialWhileComp' {
@@ -95,8 +103,8 @@ namespace Append.Test
         private void TestFactorialFunctionRecursive()
         {
             Reset();
-            var f = new ASTFunction("factorialRec", _types,
-                parameters: [("N", Types.TypeId.Int)],
+            var f = new ASTFunction("factorialRec",
+                parameters: [("N", "int")],
                 body: new ASTIfElse(
                     new ASTCall("<=", [new ASTReadVar("N"), new ASTConst(Value.FromInt(1L))]),
                     new ASTConst(Value.FromInt(1L)),
@@ -107,7 +115,7 @@ namespace Append.Test
             SetMain(
                 new ASTBlock([f, new ASTResolvedCall(f, [new ASTConst(Value.FromInt(6L))])])
             );
-            var result = CompileAndRun();
+            var result = ParseCompileAndRun();
             Debug.Assert(result.TypeId == Types.TypeId.Int && result.Data.Int == 720);
             Debug.Assert(ProgramToString() ==
 @"func N: int 'factorialRec' => N <= 1 ? 1 else (N - 1) factorialRec * N
@@ -133,9 +141,9 @@ namespace Append.Test
             return result;
         }
 
-        private ASTFunction FactorialFunctionRecursiveAccumulationTailCall()
-            => new("factorialTail", _types,
-                parameters: [("N", Types.TypeId.Int), ("acc", Types.TypeId.Int)],
+        private static ASTFunction FactorialFunctionRecursiveAccumulationTailCall()
+            => new("factorialTail", 
+                parameters: [("N", "int"), ("acc", "int")],
                 body: new ASTIfElse(
                     new ASTCall("<=", [new ASTReadVar("N"), new ASTConst(Value.FromInt(1L))]),
                     new ASTReadVar("acc"),
@@ -153,15 +161,15 @@ namespace Append.Test
                 f,
                 new ASTResolvedCall(f, [new ASTConst(Value.FromInt(6L))])
             ]));
-            var result = CompileAndRun();
+            var result = ParseCompileAndRun();
             Debug.Assert(result.TypeId == Types.TypeId.Int && result.Data.Int == 720);
         }
 
-        private ASTFunction FactorialFunctionRecursiveTailCall()
+        private static ASTFunction FactorialFunctionRecursiveTailCall()
         {
             var accumulation = FactorialFunctionRecursiveAccumulationTailCall();
-            return new("factorialProxy", _types,
-                parameters: [("N", Types.TypeId.Int)],
+            return new("factorialProxy",
+                parameters: [("N", "int")],
                 body: new ASTBlock([
                     accumulation,
                     new ASTCall(accumulation.Name, [new ASTReadVar("N"), new ASTConst(Value.FromInt(1L))])
@@ -179,13 +187,13 @@ namespace Append.Test
                 addOneFunc,
                 compNode
                 ]));
-            var result = CompileAndRun();
+            var result = ParseCompileAndRun();
             Debug.Assert(result.TypeId == Types.TypeId.Bool && result.Data.Bool == true);
         }
 
-        private ASTFunction AddOne()
-            => new("addOne", _types,
-                parameters: [("a", Types.TypeId.Int)],
+        private static ASTFunction AddOne()
+            => new("addOne", 
+                parameters: [("a", "int")],
                 body: new ASTReturn(
                         new ASTCall(
                             "+",
@@ -200,13 +208,13 @@ namespace Append.Test
             SetMain(new ASTBlock([
                 new ASTDefineVar("a", "int"),
                 new ASTFunction(
-                    "f", _types,
+                    "f",
                     body: new ASTWriteVar("a", new ASTConst(Value.FromInt(42)))
                 ),
                 new ASTCall("f", []),
                 new ASTReadVar("a")
             ]));
-            var result = CompileAndRun();
+            var result = ParseCompileAndRun();
             Debug.Assert(result.TypeId == Types.TypeId.Int && result.Data.Int == 42);
         }
     }

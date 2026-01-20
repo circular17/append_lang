@@ -1,10 +1,18 @@
-﻿namespace Append.AST
+﻿using Append.Types;
+using System;
+
+namespace Append.AST
 {
-    public record Variable(string Name, Types.TypeId TypeId, Types.TypeManager TypeManager)
+    public class Variable(string name, string typeName)
     {
+        public string Name { get; } = name;
+        public string TypeName { get; } = typeName;
+
+        public TypeId TypeId { get; set; } = TypeId.None;
+
         public int StackIndex { get; set; }
 
         public override string ToString()
-            => TypeId == Types.TypeId.None ? Name : $"{Name}: {TypeManager.GetTypeDef(TypeId).Name}";
+            => TypeName == "" ? Name : $"{Name}: {TypeName}";
     }
 }

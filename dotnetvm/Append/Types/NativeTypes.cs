@@ -25,8 +25,9 @@ namespace Append.Types
 
             foreach (var intrinsic in BinaryIntrinsic.BinaryIntrinsics)
             {
-                scope.AddFunction(new ASTFunction(intrinsic.Name, typeManager,
-                    parameters: [("a", intrinsic.LeftType), ("b", intrinsic.RightType)])
+                scope.AddFunction(new ASTFunction(intrinsic.Name, 
+                    parameters: [("a", typeManager.GetTypeDef(intrinsic.LeftType).Name), 
+                        ("b", typeManager.GetTypeDef(intrinsic.RightType).Name)])
                 {
                     Body = new ASTBinaryIntrinsic(new ASTReadVar("a"),
                         new ASTReadVar("b"), intrinsic),
